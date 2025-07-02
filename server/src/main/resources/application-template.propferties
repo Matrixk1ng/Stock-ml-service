@@ -1,0 +1,6 @@
+spring.application.name=StockAnalysis
+server.port=${PORT:8080}
+
+
+finnhub.api.key=${FINNHUB_API_KEY}
+another.api.key=${ANOTHER_API_KEY}
