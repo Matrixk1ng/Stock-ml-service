@@ -1,88 +1,74 @@
-'use client'
+"use client";
 
-import { useQuery } from '@tanstack/react-query'
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts'
+// import { useQuery } from "@tanstack/react-query";
+// import {
+//   LineChart,
+//   Line,
+//   XAxis,
+//   YAxis,
+//   CartesianGrid,
+//   Tooltip,
+//   ResponsiveContainer,
+// } from "recharts";
+import { Screener, sectors } from "@/types/stock";
+import { getSectorPerformance, getStockScreener } from "@/api/stockApis";
+import useSWR from "swr";
+import { useMemo } from "react";
 
-// Mock data for sector performance
-const mockSectorPerformance = [
-  { sector: 'Technology', performance: 12.5 },
-  { sector: 'Healthcare', performance: 8.2 },
-  { sector: 'Financial Services', performance: 5.7 },
-  { sector: 'Consumer Cyclical', performance: 4.3 },
-  { sector: 'Energy', performance: -2.1 },
-  { sector: 'Industrials', performance: 3.8 },
-  { sector: 'Real Estate', performance: -1.5 },
-  { sector: 'Utilities', performance: 2.4 },
-]
+const sectorPerformance = () => getSectorPerformance();
 
-// Mock data for volume spikes
-const mockVolumeSpikes = [
-  {
-    symbol: 'AAPL',
-    name: 'Apple Inc.',
-    volume: 52345678,
-    avgVolume: 23456789,
-    change: 2.3,
-  },
-  {
-    symbol: 'TSLA',
-    name: 'Tesla Inc.',
-    volume: 45678912,
-    avgVolume: 34567890,
-    change: -2.1,
-  },
-  {
-    symbol: 'NVDA',
-    name: 'NVIDIA Corp.',
-    volume: 34567890,
-    avgVolume: 23456789,
-    change: 3.5,
-  },
-]
+// calls the stock screnner api to get the volumns
+const volumeSpikes = () => getStockScreener();
+
 
 // Mock data for historical prices
-const mockHistoricalPrices = [
-  { date: '2024-01-01', price: 180.5 },
-  { date: '2024-01-02', price: 182.3 },
-  { date: '2024-01-03', price: 181.8 },
-  { date: '2024-01-04', price: 183.2 },
-  { date: '2024-01-05', price: 184.5 },
-  { date: '2024-01-06', price: 183.9 },
-  { date: '2024-01-07', price: 185.2 },
-]
+// const mockHistoricalPrices = [
+//   { date: "2024-01-01", price: 180.5 },
+//   { date: "2024-01-02", price: 182.3 },
+//   { date: "2024-01-03", price: 181.8 },
+//   { date: "2024-01-04", price: 183.2 },
+//   { date: "2024-01-05", price: 184.5 },
+//   { date: "2024-01-06", price: 183.9 },
+//   { date: "2024-01-07", price: 185.2 },
+// ];
 
 export default function TrendsPage() {
-  const { data: sectorPerformance = mockSectorPerformance } = useQuery({
-    queryKey: ['sectorPerformance'],
-    queryFn: async () => {
-      // Replace with actual API call
-      return mockSectorPerformance
-    },
-  })
+  const { data: sector} = useSWR<sectors[]>( // <-- Use the array type here
+    "sectors-performance", 
+    sectorPerformance, // The fetcher uses the key
+    { revalidateOnFocus: false }
+  );
 
-  const { data: volumeSpikes = mockVolumeSpikes } = useQuery({
-    queryKey: ['volumeSpikes'],
-    queryFn: async () => {
-      // Replace with actual API call
-      return mockVolumeSpikes
-    },
-  })
+  const { data: volume} = useSWR<Screener[]>( // <-- Use the array type here
+    "volume-spike", // The key is an array
+    volumeSpikes, // The fetcher uses the key
+    { revalidateOnFocus: false }
+  );
 
-  const { data: historicalPrices = mockHistoricalPrices } = useQuery({
-    queryKey: ['historicalPrices'],
-    queryFn: async () => {
-      // Replace with actual API call
-      return mockHistoricalPrices
-    },
-  })
+ 
+
+  // const { data: historicalPrices = mockHistoricalPrices } = useQuery({
+  //   queryKey: ["historicalPrices"],
+  //   queryFn: async () => {
+  //     // Replace with actual API call
+  //     return mockHistoricalPrices;
+  //   },
+  // });
+
+  const stocksWithVolumeSpikes = useMemo(() => {
+  // 1. Make sure you have data to work with
+  if (!volume) {
+    return [];
+  }
+
+  // 2. Filter the stocks
+ const sortedByVolume = [...volume].sort((a, b) => b.volume - a.volume);
+
+  // 3. Sort the results to show the biggest spikes first
+  return sortedByVolume.slice(0, 5);
+
+}, [volume]); // This logic re-runs only when screenerData changes
+
 
   return (
     <div className="space-y-8 text-black">
@@ -90,26 +76,36 @@ export default function TrendsPage() {
 
       {/* Sector Performance */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h2 className="text-xl font-semibold mb-4 text-black">Sector Performance</h2>
+        <h2 className="text-xl font-semibold mb-4 text-black">
+          Sector Performance
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {sectorPerformance.map((sector) => (
-            <div
-              key={sector.sector}
-              className="p-4 rounded-lg border border-gray-200"
-            >
-              <h3 className="text-sm font-medium text-gray-900">
-                {sector.sector}
-              </h3>
-              <p
-                className={`mt-1 text-lg font-semibold ${
-                  sector.performance >= 0 ? 'text-green-600' : 'text-red-600'
-                }`}
+          {sector?.map((sector) => {
+            // --- FIX IS HERE ---
+            // 1. Convert the string to a number for the comparison.
+            const performanceValue = parseFloat(sector.changesPercentage);
+
+            return (
+              <div
+                key={sector.sector}
+                className="p-4 rounded-lg border border-gray-200"
               >
-                {sector.performance >= 0 ? '+' : ''}
-                {sector.performance}%
-              </p>
-            </div>
-          ))}
+                <h3 className="text-sm font-medium text-gray-900">
+                  {sector.sector}
+                </h3>
+                <p
+                  // 2. Use the new number for the color logic.
+                  className={`mt-1 text-lg font-semibold ${
+                    performanceValue >= 0 ? "text-green-600" : "text-red-600"
+                  }`}
+                >
+                  {performanceValue >= 0 ? "+" : ""}
+                  {/* 3. Display the original, pre-formatted string. */}
+                  {performanceValue.toFixed(2)} %
+                </p>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -130,35 +126,31 @@ export default function TrendsPage() {
                   Volume
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Avg Volume
+                  Price
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Change
-                </th>
+                </th> */}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {volumeSpikes.map((stock) => (
+              {stocksWithVolumeSpikes.map((stock) => (
                 <tr key={stock.symbol}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {stock.symbol}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {stock.name}
+                    {stock.companyName}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {stock.volume.toLocaleString()}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {stock.avgVolume.toLocaleString()}
-                  </td>
+                  
                   <td
-                    className={`px-6 py-4 whitespace-nowrap text-sm ${
-                      stock.change >= 0 ? 'text-green-600' : 'text-red-600'
-                    }`}
+                    className="px-6 py-4 whitespace-nowrap text-sm"
                   >
-                    {stock.change >= 0 ? '+' : ''}
-                    {stock.change}%
+                    
+                    {stock.price}
                   </td>
                 </tr>
               ))}
@@ -168,7 +160,7 @@ export default function TrendsPage() {
       </div>
 
       {/* Price Chart */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      {/* <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <h2 className="text-xl font-semibold mb-4">Market Trend</h2>
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
@@ -177,14 +169,14 @@ export default function TrendsPage() {
               <XAxis
                 dataKey="date"
                 tick={{ fontSize: 12 }}
-                tickFormatter={(value) => value.split('-')[2]}
+                tickFormatter={(value) => value.split("-")[2]}
               />
               <YAxis
                 tick={{ fontSize: 12 }}
                 tickFormatter={(value) => `$${value}`}
               />
               <Tooltip
-                formatter={(value: number) => [`$${value}`, 'Price']}
+                formatter={(value: number) => [`$${value}`, "Price"]}
                 labelFormatter={(label) => `Date: ${label}`}
               />
               <Line
@@ -197,7 +189,7 @@ export default function TrendsPage() {
             </LineChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </div> */}
     </div>
-  )
-} 
+  );
+}

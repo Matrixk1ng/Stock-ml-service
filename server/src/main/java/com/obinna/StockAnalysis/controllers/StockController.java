@@ -1,5 +1,6 @@
-package com.obinna.StockAnalysis;
+package com.obinna.StockAnalysis.controllers;
 
+import com.obinna.StockAnalysis.StockInfo;
 import com.obinna.StockAnalysis.Service.AlphaVantageService;
 import com.obinna.StockAnalysis.Service.FinancialModelingPrepService;
 import com.obinna.StockAnalysis.Service.FinnhubService;
@@ -30,9 +31,36 @@ public class StockController {
         this.finnhubService = finnhubService;
         this.financialModelingPrepService = financialModelingPrepService;
     }
+    @GetMapping("/sectors-performance")
+    public ResponseEntity <SectorPerformance[]> getSectorPerformance(){
+        SectorPerformance[] sectors = financialModelingPrepService.getSectorPerformance();
+        if(sectors.length == 0){
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+        return ResponseEntity.ok(sectors);
+    }
+    @GetMapping("/stock-screener")
+    public ResponseEntity <Screener[]> getStockScreener(){
+        Screener[] screener = financialModelingPrepService.getStockScreener();
+        if (screener.length == 0){
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        return ResponseEntity.ok(screener);
+
+    }
+    @GetMapping("/company-profile/{symbol}")
+    public ResponseEntity<CompanyProfile> getCompanyProfile(@PathVariable String symbol){
+        CompanyProfile profile = financialModelingPrepService.getCompanyProfile(symbol);
+        if(profile == null){
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        return ResponseEntity.ok(profile);
+    }
+
     // price changes from 1D to 10 years
     @GetMapping("/stock-price-change/{symbol}")
-
     public ResponseEntity<PriceChange> getPriceChange(@PathVariable String symbol){
         PriceChange stockPriceChange = financialModelingPrepService.getPriceChange(symbol);
         if (stockPriceChange == null){

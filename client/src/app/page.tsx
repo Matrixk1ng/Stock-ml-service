@@ -1,7 +1,6 @@
 "use client";
 
 import Card from "../components/Card";
-import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import {
   getFinnhubQuote,
   getMarketLeaders,
@@ -104,14 +103,6 @@ export default function Dashboard() {
     <div className="min-h-screen bg-white p-8 text-black">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search"
-            className="pl-10 pr-4 py-2 rounded-lg border border-black bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <MagnifyingGlassIcon className="w-5 h-5 text-black absolute left-3 top-2.5" />
-        </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <Card title="Market Summary" borderClass="border-black rounded-xl">

@@ -1,6 +1,5 @@
-'use client'
-
-import { useQuery } from '@tanstack/react-query'
+"use client";
+import useSWR from "swr";
 import {
   LineChart,
   Line,
@@ -9,91 +8,172 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-} from 'recharts'
-import { useParams } from 'next/navigation'
+} from "recharts";
+import { useParams } from "next/navigation";
+import {
+  HistoricalChart,
+  MappedFinnhubQuote,
+  HistoricalChartApiResponse,
+  CompanyProfile,
+  News,
+} from "@/types/stock";
+import {
+  getHistoricalChart,
+  getFinnhubQuote,
+  getHistoricalFullPriceChart,
+  getCompanyProfile,
+} from "@/api/stockApis";
+import { useMemo, useState } from "react";
+import { getCompanyNews } from "@/api/newsApis";
 
-// Mock stock data
-const mockStockData = {
-  symbol: 'AAPL',
-  name: 'Apple Inc.',
-  price: 185.92,
-  change: 2.3,
-  volume: 52345678,
-  marketCap: '2.8T',
-  pe: 29.5,
-  eps: 6.31,
-  dividend: 0.92,
-  yield: 0.5,
-  sector: 'Technology',
-  industry: 'Consumer Electronics',
-  description:
-    'Apple Inc. designs, manufactures, and markets smartphones, personal computers, tablets, wearables, and accessories worldwide.',
-}
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const companyNewsFetcher = ([_key, symbol]: [string, string]) => getCompanyNews(symbol)
 
-// Mock historical data
-const mockHistoricalData = [
-  { date: '2024-01-01', price: 180.5 },
-  { date: '2024-01-02', price: 182.3 },
-  { date: '2024-01-03', price: 181.8 },
-  { date: '2024-01-04', price: 183.2 },
-  { date: '2024-01-05', price: 184.5 },
-  { date: '2024-01-06', price: 183.9 },
-  { date: '2024-01-07', price: 185.2 },
-]
 
-// Mock news data
-const mockNews = [
-  {
-    id: 1,
-    title: 'Apple Reports Record Q4 Earnings',
-    summary: 'Apple Inc. reported record-breaking fourth-quarter earnings, driven by strong iPhone sales.',
-    date: '2024-01-15',
-    url: '#',
-  },
-  {
-    id: 2,
-    title: 'New iPhone Model Expected in Q3',
-    summary: 'Apple is expected to launch its next-generation iPhone in the third quarter of 2024.',
-    date: '2024-01-14',
-    url: '#',
-  },
-  {
-    id: 3,
-    title: 'Apple Expands Services Business',
-    summary: 'Apple continues to grow its services segment with new subscription offerings.',
-    date: '2024-01-13',
-    url: '#',
-  },
-]
+// this is for 1D and 5D views
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const historicalChartFetcher = ([_key, symbol]: [string, string]) =>
+  getHistoricalChart(symbol);
+
+// This fetcher expects a key like ['daily-chart', 'AAPL']
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const historicalFullPriceFetcher = ([_key, symbol]: [string, string]) =>
+  getHistoricalFullPriceChart(symbol);
+
+// for current price
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const finnhubQuoteFetcher = ([_key, symbol]: [string, string]) =>
+  getFinnhubQuote(symbol);
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const companyProfileFetch = ([_key, symbol]: [string, string]) =>
+  getCompanyProfile(symbol);
 
 export default function StockDetailPage() {
-  const params = useParams()
-  const symbol = params.symbol as string
+  const params = useParams();
+  const symbol = params.symbol as string;
+  const [chartTimeframe, setChartTimeframe] = useState<
+    "1D" | "5D" | "1M" | "1Y"
+  >("1D");
 
+  const { data: companyNews} = useSWR<News[]>(
+    ["company-news", symbol],
+    companyNewsFetcher,
+    {revalidateOnFocus: false}
+  )
 
-  const { data: stock = mockStockData } = useQuery({
-    queryKey: ['stock', symbol],
-    queryFn: async () => {
-      // Replace with actual API call
-      return mockStockData
-    },
-  })
+  const { data: companyProfile, error: companyProfileError } =
+    useSWR<CompanyProfile>(["company", symbol], companyProfileFetch, {
+      refreshInterval: 24 * 60 * 1000,
+    });
 
-  const { data: historicalData = mockHistoricalData } = useQuery({
-    queryKey: ['historical', params.symbol],
-    queryFn: async () => {
-      // Replace with actual API call
-      return mockHistoricalData
-    },
-  })
+  const { data: finnhubQuote, error: finnhubError } =
+    useSWR<MappedFinnhubQuote>(["quote", symbol], finnhubQuoteFetcher, {
+      refreshInterval: 5 * 60 * 1000,
+    });
 
-  const { data: news = mockNews } = useQuery({
-    queryKey: ['news', params.symbol],
-    queryFn: async () => {
-      // Replace with actual API call
-      return mockNews
-    },
-  })
+  const { data: historicalChartData, error: historicalChartError } = useSWR<
+    HistoricalChart[]
+  >(["intraday-chart", symbol], historicalChartFetcher, {
+    refreshInterval: 15 * 60 * 1000,
+  });
+
+  const { data: historicalFullPriceData, error: historicalFullPriceError } =
+    useSWR<HistoricalChartApiResponse>(
+      ["daily-chart", symbol], // UNIQUE KEY
+      historicalFullPriceFetcher,
+      {
+        refreshInterval: 24 * 60 * 1000,
+      }
+    );
+
+  const isLoading =
+    !finnhubQuote && !historicalChartData && !historicalFullPriceData;
+  const hasError =
+    finnhubError || historicalChartError || historicalFullPriceError;
+
+  const chartData = useMemo(() => {
+    if (!historicalChartData || !historicalFullPriceData) return [];
+
+    const getUniqueDays = (data: { date: string }[]) => {
+      const dates = data.map((p) => p.date.split(" ")[0]);
+      return [...new Set(dates)].sort((a, b) => b.localeCompare(a)); // Sort descending
+    };
+
+    switch (chartTimeframe) {
+      case "1D": {
+        const uniqueDays = getUniqueDays(historicalChartData);
+        if (uniqueDays.length === 0) return [];
+        const mostRecentDayStr = uniqueDays[0]; // Get the most recent trading day from the data
+
+        // Explicitly filter for only that day's data points
+        const todaysData = historicalChartData.filter((p) =>
+          p.date.startsWith(mostRecentDayStr)
+        );
+        const tradingDaySlots = [];
+        for (let hour = 9; hour <= 16; hour++) {
+          for (let minute = 0; minute < 60; minute += 5) {
+            if (hour === 9 && minute < 30) continue;
+            if (hour === 16 && minute > 0) continue;
+            const time = `${hour.toString().padStart(2, "0")}:${minute
+              .toString()
+              .padStart(2, "0")}`;
+            tradingDaySlots.push(time);
+          }
+        }
+
+        const todaysDataMap = new Map(
+          todaysData.map((p) => [p.date.substring(11, 16), p.close])
+        );
+
+        return tradingDaySlots.map((timeSlot) => ({
+          date: timeSlot,
+          price: todaysDataMap.get(timeSlot) ?? null, // Use null if no data exists yet
+        }));
+      }
+      case "5D": {
+        const lastFiveTradingDays = getUniqueDays(historicalChartData).slice(
+          0,
+          5
+        );
+        return historicalChartData
+          .filter((p) => lastFiveTradingDays.includes(p.date.split(" ")[0]))
+          .map((p) => ({ date: p.date.split(" ")[0], price: p.close })) // Use just the date for the label
+          .reverse();
+      }
+      case "1M": {
+        const oneMonthOfData = historicalFullPriceData.historical.slice(0, 22); // Approx. 22 trading days in a month
+        return oneMonthOfData
+          .map((p) => ({ date: p.date, price: p.close }))
+          .reverse();
+      }
+      case "1Y": {
+        const oneYearOfData = historicalFullPriceData.historical.slice(0, 252);
+        // Thin the data: show roughly one point per week (every 5-7 trading days)
+        return oneYearOfData
+          .filter((_, index) => index % 50 === 0)
+          .map(p => ({ date: p.date, price: p.close }))
+          .reverse();
+      }
+      default:
+        return [];
+    }
+  }, [chartTimeframe, historicalChartData, historicalFullPriceData]);
+
+  //const chartData = getChartData();
+
+  if (isLoading)
+    return (
+      <div className="p-8 text-center text-gray-500">
+        Loading Stock Details...
+      </div>
+    );
+  if (hasError)
+    return (
+      <div className="p-8 text-center text-red-500">
+        Failed to load stock data.
+      </div>
+    );
 
   return (
     <div className="space-y-8 bg-white text-black min-h-screen p-8">
@@ -101,20 +181,25 @@ export default function StockDetailPage() {
       <div className="bg-white rounded-xl shadow-sm border border-black p-6">
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-3xl font-bold">{stock.symbol}</h1>
-            <p className="text-gray-600">{stock.name}</p>
+            <h1 className="text-3xl font-bold">{symbol}</h1>
+            <p className="text-gray-600">{companyProfile?.companyName}</p>
           </div>
-          <div className="text-right">
-            <p className="text-2xl font-semibold">${stock.price.toFixed(2)}</p>
-            <p
-              className={`text-sm ${
-                stock.change >= 0 ? 'text-green-600' : 'text-red-600'
-              }`}
-            >
-              {stock.change >= 0 ? '+' : ''}
-              {stock.change}%
-            </p>
-          </div>
+          {finnhubQuote && (
+            <div className="text-right">
+              <p className="text-2xl font-semibold">
+                ${finnhubQuote.currentPrice.toFixed(2)}
+              </p>
+              <p
+                className={`text-sm ${
+                  finnhubQuote.change >= 0 ? "text-green-600" : "text-red-600"
+                }`}
+              >
+                {finnhubQuote.change >= 0 ? "+" : ""}
+                {finnhubQuote.change.toFixed(2)} (
+                {finnhubQuote.percentChange.toFixed(2)}%)
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -122,23 +207,49 @@ export default function StockDetailPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Price Chart */}
         <div className="bg-white rounded-xl shadow-sm border border-black p-6">
-          <h2 className="text-xl font-semibold mb-4">Price History</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Price History</h2>
+            {/* Timeframe selector buttons */}
+            <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+              {(["1D", "5D", "1M", "1Y"] as const).map((tf) => (
+                <button
+                  key={tf}
+                  onClick={() => setChartTimeframe(tf)}
+                  className={`px-3 py-1 text-sm rounded-md ${
+                    chartTimeframe === tf
+                      ? "bg-white shadow"
+                      : "text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {tf}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={historicalData}>
+              <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => value.split('-')[2]}
+                  interval={Math.ceil(chartData.length / 8)} // leave ~8 labels
+                  tickFormatter={(d) => d.slice(5)}
+                  angle={-20}
+                  textAnchor="end"
+                  height={50}
                 />
                 <YAxis
+                  domain={["dataMin", "dataMax"]}
                   tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => `$${value}`}
+                  tickFormatter={(value) => `$${value.toFixed(2)}`}
                 />
                 <Tooltip
-                  formatter={(value: number) => [`$${value}`, 'Price']}
-                  labelFormatter={(label) => `Date: ${label}`}
+                  formatter={(value: number) =>
+                    value === null
+                      ? ["N/A", "Price"]
+                      : [`$${Number(value).toFixed(2)}`, "Price"]
+                  }
                 />
                 <Line
                   type="monotone"
@@ -153,63 +264,85 @@ export default function StockDetailPage() {
         </div>
 
         {/* Company Info */}
-        <div className="bg-white rounded-xl shadow-sm border border-black p-6">
-          <h2 className="text-xl font-semibold mb-4">Company Information</h2>
-          <dl className="grid grid-cols-2 gap-4">
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Sector</dt>
-              <dd className="mt-1 text-sm text-gray-900">{stock.sector}</dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Industry</dt>
-              <dd className="mt-1 text-sm text-gray-900">{stock.industry}</dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Market Cap</dt>
-              <dd className="mt-1 text-sm text-gray-900">${stock.marketCap}</dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">P/E Ratio</dt>
-              <dd className="mt-1 text-sm text-gray-900">{stock.pe}</dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">EPS</dt>
-              <dd className="mt-1 text-sm text-gray-900">${stock.eps}</dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Dividend</dt>
-              <dd className="mt-1 text-sm text-gray-900">${stock.dividend}</dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Dividend Yield</dt>
-              <dd className="mt-1 text-sm text-gray-900">{stock.yield}%</dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-500">Volume</dt>
+        {!companyProfileError ? (
+          <div className="bg-white rounded-xl shadow-sm border border-black p-6">
+            <h2 className="text-xl font-semibold mb-4">Company Information</h2>
+            <dl className="grid grid-cols-2 gap-4">
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Sector</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {companyProfile?.sector}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Industry</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {companyProfile?.industry}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">
+                  Market Cap
+                </dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  ${companyProfile?.mktCap.toLocaleString()}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Dividend</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  ${companyProfile?.lasDiv}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">
+                  Dividend Yield
+                </dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {companyProfile?.lasDiv && companyProfile?.price
+                    ? (
+                        (companyProfile.lasDiv / companyProfile.price) *
+                        100
+                      ).toFixed(2) + "%"
+                    : "N/A"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Volume</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {companyProfile?.volAvg.toLocaleString()}
+                </dd>
+              </div>
+            </dl>
+            <div className="mt-6">
+              <dt className="text-sm font-medium text-gray-500">Description</dt>
               <dd className="mt-1 text-sm text-gray-900">
-                {stock.volume.toLocaleString()}
+                {companyProfile?.description}
               </dd>
             </div>
-          </dl>
-          <div className="mt-6">
-            <dt className="text-sm font-medium text-gray-500">Description</dt>
-            <dd className="mt-1 text-sm text-gray-900">{stock.description}</dd>
           </div>
-        </div>
+        ) : (
+          <div>
+            <h2 className="text-xl font-semibold mb-4">
+              Company Information not Available
+            </h2>
+          </div>
+        )}
       </div>
 
       {/* News */}
       <div className="bg-white rounded-xl shadow-sm border border-black p-6">
         <h2 className="text-xl font-semibold mb-4">Latest News</h2>
         <div className="space-y-4">
-          {news.map((item) => (
+          {companyNews?.map((item) => (
             <article key={item.id} className="border-b border-gray-200 pb-4">
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {item.title}
+                {item.headline}
               </h3>
               <p className="text-gray-600 mb-2">{item.summary}</p>
               <div className="flex items-center justify-between">
-                <time className="text-sm text-gray-500">{item.date}</time>
+                <time className="text-sm text-gray-500">{new Date(item.datetime * 1000).toLocaleDateString()}</time>
                 <a
                   href={item.url}
                   className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
@@ -224,5 +357,5 @@ export default function StockDetailPage() {
         </div>
       </div>
     </div>
-  )
-} 
+  );
+}

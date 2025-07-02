@@ -29,6 +29,76 @@ public class FinancialModelingPrepService {
     private boolean isApiKeyInvalid() {
         return apiKey == null || apiKey.isEmpty() || "FINNHUB_BASE_URL".equals(apiKey);
     }
+
+    @Cacheable(value = "sector")
+    public SectorPerformance [] getSectorPerformance(){
+        if (isApiKeyInvalid()) {
+            LOGGER.warning("FMP API Key is invalid or not configured.");
+            return new SectorPerformance[0];
+        }
+
+        String screenerPath = FMP_BASE_URL + "/sectors-performance";
+        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(screenerPath)
+                .queryParam("apikey", apiKey);
+        try {
+            SectorPerformance [] response;
+            response = restTemplate.getForObject(uriBuilder.toUriString(), SectorPerformance[].class);
+            return response;
+        } catch (HttpClientErrorException e) {
+            LOGGER.log(Level.SEVERE, "HTTP Client Error fetching sector performance " + e.getStatusCode(), e);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error fetching sector performance from FMP", e);
+        }
+        return new SectorPerformance[0];
+    }
+
+
+    @Cacheable(value = "screener")
+    public Screener [] getStockScreener(){
+        if (isApiKeyInvalid()) {
+            LOGGER.warning("FMP API Key is invalid or not configured.");
+            return new Screener[0];
+        }
+
+        String screenerPath = FMP_BASE_URL + "/stock-screener";
+        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(screenerPath)
+                .queryParam("country", "US")
+                .queryParam("apikey", apiKey);
+        try {
+            Screener [] response;
+            response = restTemplate.getForObject(uriBuilder.toUriString(), Screener[].class);
+            return response;
+        } catch (HttpClientErrorException e) {
+            LOGGER.log(Level.SEVERE, "HTTP Client Error fetching Stock Screener " + e.getStatusCode(), e);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error fetching Stock Screener from FMP", e);
+        }
+        return new Screener[0];
+    }
+
+    @Cacheable(value = "profile", key = "#symbol")
+    public CompanyProfile getCompanyProfile(String symbol){
+        if (isApiKeyInvalid()) {
+            LOGGER.warning("FMP API Key is invalid or not configured.");
+            return null;
+        }
+        String profilePath = FMP_BASE_URL + "/profile/" + symbol;
+        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(profilePath)
+                .queryParam("apikey", apiKey);
+        try {
+            CompanyProfile [] response;
+            response = restTemplate.getForObject(uriBuilder.toUriString(), CompanyProfile[].class);
+            if (response != null && response.length > 0) {
+                return response[0]; // <-- This is the successful return
+            }
+        } catch (HttpClientErrorException e) {
+            LOGGER.log(Level.SEVERE, "HTTP Client Error fetching Company Profile for " + symbol + ": " + e.getStatusCode(), e);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error fetching Company Profile for " + symbol + " from FMP", e);
+        }
+        return null;
+    }
+
     @Cacheable(value = "priceChanges", key = "#symbol")
     public PriceChange getPriceChange(String symbol){
         if (isApiKeyInvalid()) {
@@ -100,6 +170,7 @@ public class FinancialModelingPrepService {
         try {
             HistoricalChart[] response;
             response = restTemplate.getForObject(uriBuilder.toUriString(), HistoricalChart[].class);
+            System.out.println("EXECUTING FMP API CALL FOR getHistoricalChart: " + symbol);
             return response;
         } catch (HttpClientErrorException e) {
             LOGGER.log(Level.SEVERE, "HTTP Client Error while fetching " + symbol +": " + e.getStatusCode() + " " + e.getResponseBodyAsString(), e);

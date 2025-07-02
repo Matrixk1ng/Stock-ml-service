@@ -24,9 +24,21 @@ public class CacheConfig {
                 // Default behavior is no expiration. We will define TTLs for specific caches.
                 long ttl = -1;
                 switch (name) {
+                    case "companyNews":
+                        ttl = 3 * 60;
+                        break;
+                    case "generalNews":
+                        ttl = 6 * 60;
+                        break;
+                    case "screener":
+                        ttl = 6 * 60;
+                        break;
+                    case "profile":
+                        ttl = 720;
+                        break;
                     case "finnhubQuotes":
                         // Cache for near real-time quotes. Expires after 1 minute.
-                        ttl = 1;
+                        ttl = 5;
                         break;
                     case "historicalChart":
                         // main stock view for present day view and 1D and 5D views

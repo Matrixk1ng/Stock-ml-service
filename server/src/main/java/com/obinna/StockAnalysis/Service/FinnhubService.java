@@ -1,6 +1,8 @@
 package com.obinna.StockAnalysis.Service;
 
 import com.obinna.StockAnalysis.dto.financial_modeling_prep.FinnhubQuote;
+import com.obinna.StockAnalysis.dto.finnhub.CompanyNews;
+import com.obinna.StockAnalysis.dto.finnhub.GeneralNews;
 import com.obinna.StockAnalysis.dto.finnhub.UniversalStockList;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
@@ -8,7 +10,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.util.UriComponentsBuilder;
-
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -31,10 +34,65 @@ public class FinnhubService {
         return apiKey == null || apiKey.isEmpty() || "FINNHUB_BASE_URL".equals(apiKey);
     }
 
+    @Cacheable(value = "companyNews")
+    public CompanyNews [] getCompanyNews(String symbol){
+        if (isApiKeyInvalid()) {
+            return new CompanyNews[0];
+        }
+        DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE; // This format is "YYYY-MM-DD"
+        LocalDate today = LocalDate.now();
+        LocalDate sevenDaysAgo = today.minusDays(7);
+
+        String url = UriComponentsBuilder.fromUriString(FINNHUB_BASE_URL)
+                .path("/company-news")
+                .queryParam("symbol", symbol)
+                // Add the 'from' date, formatted as a string
+                .queryParam("from", sevenDaysAgo.format(formatter))
+                // Add the 'to' date, formatted as a string
+                .queryParam("to", today.format(formatter))
+                .queryParam("token", apiKey)
+                .toUriString();
+        try {
+            CompanyNews [] companyNews = restTemplate.getForObject(url, CompanyNews[].class);            
+            System.out.println("EXECUTING Finnhub API CALL FOR getFinnhubQuote: ");
+            return companyNews;
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE,"Error fetching quote from Finnhub for symbol: {}" + e);
+        }
+
+        return new CompanyNews[0];
+    }
+
+
+    @Cacheable(value = "generalNews")
+    public GeneralNews [] getGeneralNews(){
+        if (isApiKeyInvalid()) {
+            return new GeneralNews[0];
+        }
+        String url = UriComponentsBuilder.fromUriString(FINNHUB_BASE_URL)
+                .path("/news")
+                .queryParam("category", "general")
+                .queryParam("token", apiKey)
+                .toUriString();
+        try {
+            GeneralNews [] generalNews = restTemplate.getForObject(url, GeneralNews[].class);            
+            System.out.println("EXECUTING Finnhub API CALL FOR getFinnhubQuote: ");
+            return generalNews;
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE,"Error fetching quote from Finnhub for symbol: {}" + e);
+        }
+
+        return new GeneralNews[0];
+    }
+
+
     // get market summary
     
     @Cacheable(value = "finnhubQuotes", key = "#symbol")
     public FinnhubQuote getQuote(String symbol) {
+        if (isApiKeyInvalid()) {
+            return null;
+        }
         LOGGER.log(Level.FINEST, "EXECUTING FINNHUB API CALL FOR QUOTE: {}", symbol);
         
         String url = UriComponentsBuilder.fromUriString(FINNHUB_BASE_URL)
