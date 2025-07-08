@@ -119,8 +119,8 @@ export default function Dashboard() {
         <Card title="Top Gainers" borderClass="border-black rounded-xl">
           <div className="divide-y divide-gray-200">
             {/* Display a loading or error state */}
-            {gainersError && <div>Failed to load losers.</div>}
-            {!gainers && !gainersError && <div>Loading losers...</div>}
+            {gainersError && <div>Failed to load Top Gainers.</div>}
+            {!gainers && !gainersError && <div>Loading Top Gainers...</div>}
 
             {/* Map over the fetched 'gainers' data */}
             {gainers?.slice(0, 3).map((stock) => (
@@ -143,8 +143,8 @@ export default function Dashboard() {
         <Card title="Most Active" borderClass="border-black rounded-xl">
           <div className="divide-y divide-gray-200">
             {/* Display a loading or error state */}
-            {activesError && <div>Failed to load losers.</div>}
-            {!actives && !activesError && <div>Loading losers...</div>}
+            {activesError && <div>Failed to load Top Active Stocks.</div>}
+            {!actives && !activesError && <div>Loading Top Active Stocks...</div>}
 
             {/* Map over the fetched 'losers' data */}
             {actives?.slice(0, 3).map((stock) => (
