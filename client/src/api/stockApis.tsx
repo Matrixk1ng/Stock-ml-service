@@ -1,4 +1,4 @@
-import { StockQuote, HistoricalChart,FinnhubQuote, MappedFinnhubQuote, MarketLeader, UniversalStockList, HistoricalChartApiResponse, CompanyProfile, Screener, sectors} from "@/types/stock"; // Adjust path as needed
+import { StockQuote, HistoricalChart,FinnhubQuote, MappedFinnhubQuote, MarketLeader, UniversalStockList, HistoricalChartApiResponse, CompanyProfile, Screener, sectors, PriceChange} from "@/types/stock"; // Adjust path as needed
 
 // Get the base URL from environment variables
 const API_BASE_URL = process.env.NEXT_PUBLIC_STOCK_API_BASE_URL;
@@ -31,6 +31,10 @@ async function fetchAPI<T>(endpoint: string): Promise<T> {
 
 export const getSectorPerformance = (): Promise<sectors[]> => {
   return fetchAPI<sectors[]>("/sectors-performance")
+}
+
+export const getPriceChange = (symbol: string): Promise<PriceChange> => {
+  return fetchAPI<PriceChange>(`/stock-price-change/${symbol}`)
 }
 
 

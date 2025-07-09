@@ -16,19 +16,25 @@ import {
   HistoricalChartApiResponse,
   CompanyProfile,
   News,
+  PriceChange,
 } from "@/types/stock";
 import {
   getHistoricalChart,
   getFinnhubQuote,
   getHistoricalFullPriceChart,
   getCompanyProfile,
+  getPriceChange,
 } from "@/api/stockApis";
 import { useMemo, useState } from "react";
 import { getCompanyNews } from "@/api/newsApis";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const companyNewsFetcher = ([_key, symbol]: [string, string]) => getCompanyNews(symbol)
+const priceChanges = ([_key, symbol]: [string, string]) =>
+  getPriceChange(symbol);
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const companyNewsFetcher = ([_key, symbol]: [string, string]) =>
+  getCompanyNews(symbol);
 
 // this is for 1D and 5D views
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -53,14 +59,20 @@ export default function StockDetailPage() {
   const params = useParams();
   const symbol = params.symbol as string;
   const [chartTimeframe, setChartTimeframe] = useState<
-    "1D" | "5D" | "1M" | "1Y"
+    "1D" | "5D" | "1M" | "ytd" | "1Y"
   >("1D");
 
-  const { data: companyNews} = useSWR<News[]>(
+  const { data: priceChangeData } = useSWR<PriceChange>(
+    ["price-changes", symbol],
+    priceChanges,
+    { revalidateOnFocus: false }
+  );
+
+  const { data: companyNews } = useSWR<News[]>(
     ["company-news", symbol],
     companyNewsFetcher,
-    {revalidateOnFocus: false}
-  )
+    { revalidateOnFocus: false }
+  );
 
   const { data: companyProfile, error: companyProfileError } =
     useSWR<CompanyProfile>(["company", symbol], companyProfileFetch, {
@@ -92,6 +104,10 @@ export default function StockDetailPage() {
   const hasError =
     finnhubError || historicalChartError || historicalFullPriceError;
 
+  const currentChange =
+    priceChangeData?.[chartTimeframe] !== undefined
+      ? Number(priceChangeData[chartTimeframe]).toFixed(2) // This is the fix
+      : null;
   const chartData = useMemo(() => {
     if (!historicalChartData || !historicalFullPriceData) return [];
 
@@ -136,31 +152,68 @@ export default function StockDetailPage() {
           0,
           5
         );
+
         return historicalChartData
           .filter((p) => lastFiveTradingDays.includes(p.date.split(" ")[0]))
-          .map((p) => ({ date: p.date.split(" ")[0], price: p.close })) // Use just the date for the label
+          .map((p) => ({
+            date: p.date, // Keep full timestamp: 'YYYY-MM-DD HH:mm:ss'
+            price: Number(p.close),
+          }))
           .reverse();
       }
       case "1M": {
-        const oneMonthOfData = historicalFullPriceData.historical.slice(0, 22); // Approx. 22 trading days in a month
+        const oneMonthOfData = historicalFullPriceData.historical.slice(0, 21); // Approx. 22 trading days in a month
         return oneMonthOfData
           .map((p) => ({ date: p.date, price: p.close }))
           .reverse();
       }
+      case "ytd": {
+        const currentYear = historicalFullPriceData.historical.filter((entry) =>
+          entry.date.startsWith("2025")
+        );
+        const yearToDate = currentYear.map((p) => ({
+          date: p.date,
+          price: Number(p.close),
+        }));
+        return yearToDate.reverse();
+      }
       case "1Y": {
-        const oneYearOfData = historicalFullPriceData.historical.slice(0, 252);
-        // Thin the data: show roughly one point per week (every 5-7 trading days)
-        return oneYearOfData
-          .filter((_, index) => index % 50 === 0)
-          .map(p => ({ date: p.date, price: p.close }))
+        const oneYear = historicalFullPriceData.historical.slice(0, 251);
+        const oneWholeYear = oneYear
+          .map((p) => ({
+            date: p.date,
+            price: Number(p.close),
+          }))
           .reverse();
+        return oneWholeYear;
       }
       default:
         return [];
     }
   }, [chartTimeframe, historicalChartData, historicalFullPriceData]);
 
-  //const chartData = getChartData();
+  // calculations for
+  const currentPrice = finnhubQuote?.currentPrice;
+  const openingPrice = chartData.length > 0 ? chartData[0].price : null;
+  const previousClose = finnhubQuote?.previousClosePrice;
+
+  console.log("openingPrice", openingPrice);
+  let dollarChange: number | null = null;
+
+  if (currentPrice !== undefined) {
+    if (chartTimeframe === "1D" && previousClose !== undefined) {
+      dollarChange = currentPrice - previousClose;
+    } else if (chartData.length > 0 && chartData[0].price !== null) {
+      console.log("chartData[0].price",chartData[0].price)
+      dollarChange = currentPrice - Number(chartData[0].price);
+    }
+  }
+
+  const dollarChangeDisplay =
+    dollarChange !== null ? dollarChange.toFixed(2) : null;
+
+  const dollarChangeNumber =
+    dollarChangeDisplay !== null ? parseFloat(dollarChangeDisplay) : null;
 
   if (isLoading)
     return (
@@ -189,15 +242,16 @@ export default function StockDetailPage() {
               <p className="text-2xl font-semibold">
                 ${finnhubQuote.currentPrice.toFixed(2)}
               </p>
-              <p
-                className={`text-sm ${
-                  finnhubQuote.change >= 0 ? "text-green-600" : "text-red-600"
-                }`}
-              >
-                {finnhubQuote.change >= 0 ? "+" : ""}
-                {finnhubQuote.change.toFixed(2)} (
-                {finnhubQuote.percentChange.toFixed(2)}%)
-              </p>
+              {dollarChangeDisplay !== null && dollarChangeNumber !== null && (
+                <p
+                  className={`text-sm ${
+                    dollarChangeNumber >= 0 ? "text-green-600" : "text-red-600"
+                  }`}
+                >
+                  {dollarChangeNumber >= 0 ? "+" : ""}${dollarChangeDisplay} (
+                  {currentChange}%)
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -211,7 +265,7 @@ export default function StockDetailPage() {
             <h2 className="text-xl font-semibold">Price History</h2>
             {/* Timeframe selector buttons */}
             <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
-              {(["1D", "5D", "1M", "1Y"] as const).map((tf) => (
+              {(["1D", "5D", "1M", "ytd", "1Y"] as const).map((tf) => (
                 <button
                   key={tf}
                   onClick={() => setChartTimeframe(tf)}
@@ -240,7 +294,10 @@ export default function StockDetailPage() {
                   height={50}
                 />
                 <YAxis
-                  domain={["dataMin", "dataMax"]}
+                  domain={[
+                    (dataMin: number) => Math.floor(dataMin - 2), // lower buffer
+                    (dataMax: number) => Math.ceil(dataMax + 2), // upper buffer
+                  ]}
                   tick={{ fontSize: 12 }}
                   tickFormatter={(value) => `$${value.toFixed(2)}`}
                 />
@@ -315,12 +372,12 @@ export default function StockDetailPage() {
                 </dd>
               </div>
             </dl>
-            <div className="mt-6">
+            {/* <div className="mt-6">
               <dt className="text-sm font-medium text-gray-500">Description</dt>
               <dd className="mt-1 text-sm text-gray-900">
                 {companyProfile?.description}
               </dd>
-            </div>
+            </div> */}
           </div>
         ) : (
           <div>
@@ -342,7 +399,9 @@ export default function StockDetailPage() {
               </h3>
               <p className="text-gray-600 mb-2">{item.summary}</p>
               <div className="flex items-center justify-between">
-                <time className="text-sm text-gray-500">{new Date(item.datetime * 1000).toLocaleDateString()}</time>
+                <time className="text-sm text-gray-500">
+                  {new Date(item.datetime * 1000).toLocaleDateString()}
+                </time>
                 <a
                   href={item.url}
                   className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
