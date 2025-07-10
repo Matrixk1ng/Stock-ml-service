@@ -103,11 +103,13 @@ export default function StockDetailPage() {
     !finnhubQuote && !historicalChartData && !historicalFullPriceData;
   const hasError =
     finnhubError || historicalChartError || historicalFullPriceError;
-
+  
+  // this is for price changes for 1D, 5D, 1M e,t,c views
   const currentChange =
     priceChangeData?.[chartTimeframe] !== undefined
       ? Number(priceChangeData[chartTimeframe]).toFixed(2) // This is the fix
       : null;
+
   const chartData = useMemo(() => {
     if (!historicalChartData || !historicalFullPriceData) return [];
 
@@ -162,7 +164,7 @@ export default function StockDetailPage() {
           .reverse();
       }
       case "1M": {
-        const oneMonthOfData = historicalFullPriceData.historical.slice(0, 21); // Approx. 22 trading days in a month
+        const oneMonthOfData = historicalFullPriceData.historical.slice(0, 21); // Approx. 21 trading days in a month
         return oneMonthOfData
           .map((p) => ({ date: p.date, price: p.close }))
           .reverse();
@@ -194,10 +196,8 @@ export default function StockDetailPage() {
 
   // calculations for
   const currentPrice = finnhubQuote?.currentPrice;
-  const openingPrice = chartData.length > 0 ? chartData[0].price : null;
   const previousClose = finnhubQuote?.previousClosePrice;
 
-  console.log("openingPrice", openingPrice);
   let dollarChange: number | null = null;
 
   if (currentPrice !== undefined) {

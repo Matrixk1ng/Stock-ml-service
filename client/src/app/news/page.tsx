@@ -5,7 +5,6 @@ import { News } from '@/types/stock'
 import useSWR from 'swr'
 import Image from 'next/image'
 
-// Mock news data
 
 
 const generalNewsFetcher = () => getGeneralNews()
