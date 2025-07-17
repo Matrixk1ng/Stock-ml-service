@@ -19,5 +19,5 @@ public class MarketMoversApiResponse {
     @JsonProperty("most_actively_traded")
     private List<MarketMover> mostActivelyTraded;
 
-    // Add Getters and Setters for all fields
+    // Lombok generates getters and setters
 }
