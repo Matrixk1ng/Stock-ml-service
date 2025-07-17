@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { getAllUsSymbols } from '@/api/stockApis';
 import { UniversalStockList } from '@/types/stock';
+import { useDebounce } from "use-debounce";
 
 // The fetcher for our SWR hook
 const symbolsFetcher = () => getAllUsSymbols();
@@ -13,6 +14,8 @@ const symbolsFetcher = () => getAllUsSymbols();
 export default function Search() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isActive, setIsActive] = useState(false);
+
+  const [debouncedValue] = useDebounce(searchTerm, 300);
 
   // Fetch all symbols once and cache globally with SWR
   const { data: allStocks, error } = useSWR<UniversalStockList[]>(
@@ -27,17 +30,17 @@ export default function Search() {
   // Filter the list based on the search term.
   // useMemo prevents re-filtering on every render, only when searchTerm or allStocks changes.
   const filteredStocks = useMemo(() => {
-    if (!searchTerm || !allStocks) {
+    if (!debouncedValue || !allStocks) {
       return [];
     }
-    const term = searchTerm.toLowerCase();
+    const term = debouncedValue.toLowerCase();
     return allStocks
       .filter(
         (stock) =>
           stock.symbol.toLowerCase().startsWith(term) ||
           stock.description.toLowerCase().includes(term)
       )
-  }, [searchTerm, allStocks]);
+  }, [debouncedValue, allStocks]);
 
   if (error) {
     console.error("Failed to load stock list for search.");
@@ -78,7 +81,7 @@ export default function Search() {
                 </li>
               ))
             ) : (
-              <li className="p-2 text-gray-500">No results found.</li>
+              debouncedValue && <li className="p-2 text-gray-500">No results found.</li>
             )}
           </ul>
         </div>

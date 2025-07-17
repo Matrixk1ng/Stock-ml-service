@@ -15,5 +15,5 @@ public class MarketMover {
     private String changePercentage;
     private String volume;
 
-    // Add Getters and Setters for all fields
+    // Lombok generates getters and setters
 }
