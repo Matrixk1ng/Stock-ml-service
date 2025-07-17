@@ -27,7 +27,7 @@ public class FinancialModelingPrepService {
         this.apiKey = apiKey;
     }
     private boolean isApiKeyInvalid() {
-        return apiKey == null || apiKey.isEmpty() || "FINNHUB_BASE_URL".equals(apiKey);
+        return apiKey == null || apiKey.isEmpty() || "YOUR_FMP_API_KEY".equals(apiKey);
     }
 
     @Cacheable(value = "sector")
