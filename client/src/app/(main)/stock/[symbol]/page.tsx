@@ -123,7 +123,7 @@ export default function StockDetailPage() {
         const uniqueDays = getUniqueDays(historicalChartData);
         if (uniqueDays.length === 0) return [];
         const mostRecentDayStr = uniqueDays[0]; // Get the most recent trading day from the data
-
+        
         // Explicitly filter for only that day's data points
         const todaysData = historicalChartData.filter((p) =>
           p.date.startsWith(mostRecentDayStr)

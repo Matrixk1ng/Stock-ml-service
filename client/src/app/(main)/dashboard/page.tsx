@@ -1,14 +1,11 @@
 "use client";
 
 import Card from "@/components/Card";
-import {
-  getFinnhubQuote,
-  getMarketLeaders,
-} from "@/api/stockApis";
-import {MappedFinnhubQuote, MarketLeader } from "@/types/stock";
+import { getFinnhubQuote, getMarketLeaders } from "@/api/stockApis";
+import { MappedFinnhubQuote, MarketLeader } from "@/types/stock";
 import useSWR from "swr";
-import LeaderRow from '@/components/LeaderRow'
-import  useAuth  from '@/app/hooks/useAuth';
+import LeaderRow from "@/components/LeaderRow";
+import useAuth from "@/hooks/useAuth";
 
 const fetcher = (symbol: string) => getFinnhubQuote(symbol);
 function StockRow({ symbol, name }: { symbol: string; name: string }) {
@@ -67,8 +64,6 @@ const marketSummaryList = [
 ];
 // Mock data for top movers
 
-
-
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const marketLeaderFetcher = ([_key, leaderType]: [string, string]): Promise<
   MarketLeader[]
@@ -96,14 +91,12 @@ export default function Dashboard() {
     { refreshInterval: 30 * 60 * 1000 }
   );
 
-  
-
-
-
   return (
     <div className="min-h-screen bg-white p-8 text-black">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard </h1>
+        <h1 className="text-3xl font-bold tracking-tight">
+          Dashboard {user?.name}
+        </h1>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <Card title="Market Summary" borderClass="border-black rounded-xl">
@@ -125,7 +118,12 @@ export default function Dashboard() {
 
             {/* Map over the fetched 'gainers' data */}
             {gainers?.slice(0, 3).map((stock) => (
-              <LeaderRow key={stock.symbol} stock={stock} isGainer={true} isActive={false}/>
+              <LeaderRow
+                key={stock.symbol}
+                stock={stock}
+                isGainer={true}
+                isActive={false}
+              />
             ))}
           </div>
         </Card>
@@ -137,7 +135,12 @@ export default function Dashboard() {
 
             {/* Map over the fetched 'losers' data */}
             {losers?.slice(0, 3).map((stock) => (
-              <LeaderRow key={stock.symbol} stock={stock} isGainer={false} isActive={false} />
+              <LeaderRow
+                key={stock.symbol}
+                stock={stock}
+                isGainer={false}
+                isActive={false}
+              />
             ))}
           </div>
         </Card>
@@ -145,11 +148,18 @@ export default function Dashboard() {
           <div className="divide-y divide-gray-200">
             {/* Display a loading or error state */}
             {activesError && <div>Failed to load Top Active Stocks.</div>}
-            {!actives && !activesError && <div>Loading Top Active Stocks...</div>}
+            {!actives && !activesError && (
+              <div>Loading Top Active Stocks...</div>
+            )}
 
             {/* Map over the fetched 'losers' data */}
             {actives?.slice(0, 3).map((stock) => (
-              <LeaderRow key={stock.symbol} stock={stock} isGainer={false} isActive={true} />
+              <LeaderRow
+                key={stock.symbol}
+                stock={stock}
+                isGainer={false}
+                isActive={true}
+              />
             ))}
           </div>
         </Card>
