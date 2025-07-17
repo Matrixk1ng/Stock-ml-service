@@ -23,6 +23,6 @@ public class AlphaVantageSearchApiResponse {
 
 
 
-    // Getters and Setters
+    // Lombok generates getters and setters
 
 }

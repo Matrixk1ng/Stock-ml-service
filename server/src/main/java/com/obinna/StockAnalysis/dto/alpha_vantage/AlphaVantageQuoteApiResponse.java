@@ -21,6 +21,6 @@ public class AlphaVantageQuoteApiResponse {
     @JsonProperty("Information")
     private String information; // Captures rate limit messages
 
-    // Getters and Setters
+    // Lombok generates getters and setters
 
 }
