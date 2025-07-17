@@ -31,7 +31,7 @@ public class FinnhubService {
     }
 
     private boolean isApiKeyInvalid() {
-        return apiKey == null || apiKey.isEmpty() || "FINNHUB_BASE_URL".equals(apiKey);
+        return apiKey == null || apiKey.isEmpty() || "YOUR_FINNHUB_API_KEY".equals(apiKey);
     }
 
     @Cacheable(value = "companyNews")
