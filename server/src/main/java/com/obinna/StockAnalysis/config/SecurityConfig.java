@@ -23,7 +23,7 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(authz -> authz
                 // Permit access to the OAuth2 endpoints. This is the key change.
-                .requestMatchers("/login/**", "/oauth2/**").permitAll()
+                .requestMatchers("/login/**", "/oauth2/**", "/api/portfolios/**").authenticated()
                 // You can protect your data APIs later with JWT validation
                 .anyRequest().permitAll() // For now, let's permit all other requests
             )

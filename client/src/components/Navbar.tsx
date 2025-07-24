@@ -11,6 +11,7 @@ const navigation = [
   { name: "News", href: "/news" },
   { name: "Screener", href: "/screener" },
   { name: "Trends", href: "/trends" },
+  { name: "Portfolio", href: "portfolio" },
 ];
 
 export default function Navbar() {
