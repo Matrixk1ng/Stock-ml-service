@@ -78,19 +78,19 @@ const marketLeaderFetcher = ([_key, leaderType]: [string, string]): Promise<
 export default function Dashboard() {
 
   const { data: gainers, error: gainersError } = useSWR<MarketLeader[]>( // <-- Use the array type here
-    ["market-leaders", "gainers"], // The key is an array
+    ["market-leaders", "biggest-gainers"], // The key is an array
     marketLeaderFetcher, // The fetcher uses the key
     { refreshInterval: 30 * 60 * 1000 }
   );
 
   const { data: losers, error: losersError } = useSWR<MarketLeader[]>( // <-- Use the array type here
-    ["market-leaders", "losers"], // The key is an array
+    ["market-leaders", "biggest-losers"], // The key is an array
     marketLeaderFetcher, // The fetcher uses the key
     { refreshInterval: 30 * 60 * 1000 }
   );
 
   const { data: actives, error: activesError } = useSWR<MarketLeader[]>( // <-- Use the array type here
-    ["market-leaders", "actives"], // The key is an array
+    ["market-leaders", "most-actives"], // The key is an array
     marketLeaderFetcher, // The fetcher uses the key
     { refreshInterval: 30 * 60 * 1000 }
   );

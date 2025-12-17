@@ -14,7 +14,7 @@ import java.util.logging.Logger;
 
 @Service
 public class FinancialModelingPrepService {
-    private final String FMP_BASE_URL = "https://financialmodelingprep.com/api/v3";
+    private final String FMP_BASE_URL = "https://financialmodelingprep.com";
     private static final Logger LOGGER = Logger.getLogger(FinancialModelingPrepService.class.getName());
 
     private final RestTemplate restTemplate;
@@ -208,7 +208,7 @@ public class FinancialModelingPrepService {
         if (isApiKeyInvalid()) {
             return new MarketLeader[0];
         }
-        String marketLeadersPath = FMP_BASE_URL + "/stock_market/" + leaderType;
+        String marketLeadersPath = FMP_BASE_URL + "/stable/" + leaderType;
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(marketLeadersPath)
                 .queryParam("apikey", apiKey);
         try {
