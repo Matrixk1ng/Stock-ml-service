@@ -84,13 +84,13 @@ public class StockController {
     }
     //gets historical data for the past 5 years to use for 1M, 6M and 1Y views
     @GetMapping("/historical-price-full/{symbol}")
-    public ResponseEntity<HistoricalChartFullApiResponse> getHistoricalDailyChart(@PathVariable String symbol) {
+    public ResponseEntity<List<HistoricalChart>> getHistoricalDailyChart(@PathVariable String symbol) {
 
         // Call the new service method
-        HistoricalChartFullApiResponse historicalData = financialModelingPrepService.getHistoricalDailyChart(symbol);
+        List<HistoricalChart> historicalData = Arrays.asList(financialModelingPrepService.getHistoricalDailyChart(symbol));
 
         // Check if the service returned data or null (in case of an error)
-        if (historicalData == null || historicalData.getHistorical() == null || historicalData.getHistorical().isEmpty()) {
+        if (historicalData.isEmpty()) {
             // Return a 404 Not Found if no data was found
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }

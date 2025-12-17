@@ -1,5 +1,6 @@
 package com.obinna.StockAnalysis.Service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.obinna.StockAnalysis.dto.financial_modeling_prep.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
@@ -8,13 +9,13 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
-
+import java.util.Arrays;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 @Service
 public class FinancialModelingPrepService {
-    private final String FMP_BASE_URL = "https://financialmodelingprep.com";
+    private final String FMP_BASE_URL = "https://financialmodelingprep.com/stable/";
     private static final Logger LOGGER = Logger.getLogger(FinancialModelingPrepService.class.getName());
 
     private final RestTemplate restTemplate;
@@ -37,7 +38,7 @@ public class FinancialModelingPrepService {
             return new SectorPerformance[0];
         }
 
-        String screenerPath = FMP_BASE_URL + "/sectors-performance";
+        String screenerPath = FMP_BASE_URL + "sectors-performance";
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(screenerPath)
                 .queryParam("apikey", apiKey);
         try {
@@ -60,7 +61,7 @@ public class FinancialModelingPrepService {
             return new Screener[0];
         }
 
-        String screenerPath = FMP_BASE_URL + "/stock-screener";
+        String screenerPath = FMP_BASE_URL + "stock-screener";
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(screenerPath)
                 .queryParam("country", "US")
                 .queryParam("apikey", apiKey);
@@ -82,8 +83,9 @@ public class FinancialModelingPrepService {
             LOGGER.warning("FMP API Key is invalid or not configured.");
             return null;
         }
-        String profilePath = FMP_BASE_URL + "/profile/" + symbol;
+        String profilePath = FMP_BASE_URL + "profile";
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(profilePath)
+                .queryParam("symbol",symbol)
                 .queryParam("apikey", apiKey);
         try {
             CompanyProfile [] response;
@@ -106,10 +108,11 @@ public class FinancialModelingPrepService {
             return null;
         }
         // Build the specific path for this endpoint
-        String historicalDataPath = FMP_BASE_URL + "/stock-price-change/" + symbol;
+        String historicalDataPath = FMP_BASE_URL + "stock-price-change";
 
         // Build the full URL with the API key
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(historicalDataPath)
+                .queryParam("symbol",symbol)
                 .queryParam("apikey", apiKey);
         try {
             // Make the API call and map the response to your wrapper class
@@ -130,25 +133,28 @@ public class FinancialModelingPrepService {
 
     @Cacheable(value = "historicalDaily", key = "#symbol")
     //1M", "6M", "1Y" Chart Views
-    public HistoricalChartFullApiResponse getHistoricalDailyChart(String symbol) {
+    public HistoricalChart [] getHistoricalDailyChart(String symbol) {
         // Return null if the API key is missing
         if (isApiKeyInvalid()) {
             LOGGER.warning("FMP API Key is invalid or not configured.");
-            return null;
+            return new HistoricalChart[0];
         }
 
         // Build the specific path for this endpoint
-        String historicalDataPath = FMP_BASE_URL + "/historical-price-full/" + symbol;
+        String historicalDataPath = FMP_BASE_URL + "historical-price-eod/full";
 
         // Build the full URL with the API key
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(historicalDataPath)
+                .queryParam("symbol",symbol)
                 .queryParam("apikey", apiKey);
 
         try {
             // Make the API call and map the response to your wrapper class
-            HistoricalChartFullApiResponse response;
-            response = restTemplate.getForObject(uriBuilder.toUriString(), HistoricalChartFullApiResponse.class);
-            return response;
+            HistoricalChart[] response;
+            response = restTemplate.getForObject(uriBuilder.toUriString(), HistoricalChart[].class);
+            ObjectMapper mapper = new ObjectMapper();
+            System.out.println("EXECUTING FMP API CALL FOR getHistoricalFullChart:\n" + mapper.writerWithDefaultPrettyPrinter().writeValueAsString(response));
+            return response != null ? response : new HistoricalChart[0];
 
         } catch (HttpClientErrorException e) {
             LOGGER.log(Level.SEVERE, "HTTP Client Error fetching historical data for " + symbol + ": " + e.getStatusCode(), e);
@@ -157,15 +163,16 @@ public class FinancialModelingPrepService {
         }
 
         // Return null if there was any kind of error
-        return null;
+        return new HistoricalChart[0];
     }
     @Cacheable(value = "historicalChart", key="#symbol")
     public HistoricalChart[] getHistoricalChart(String symbol){
         if (isApiKeyInvalid()) {
             return new HistoricalChart[0];
         }
-        String stockSymbol = FMP_BASE_URL + "/historical-chart/5min/" + symbol;
+        String stockSymbol = FMP_BASE_URL + "historical-chart/5min";
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(stockSymbol)
+                .queryParam("symbol",symbol)
                 .queryParam("apikey", apiKey);
         try {
             HistoricalChart[] response;
@@ -186,7 +193,7 @@ public class FinancialModelingPrepService {
         if (isApiKeyInvalid()) {
             return new StockQuote();
         }
-        String stockSymbol = FMP_BASE_URL + "/quote/" + symbol;
+        String stockSymbol = FMP_BASE_URL + "quote/" + symbol;
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(stockSymbol)
                 .queryParam("apikey", apiKey);
         try {
@@ -208,7 +215,7 @@ public class FinancialModelingPrepService {
         if (isApiKeyInvalid()) {
             return new MarketLeader[0];
         }
-        String marketLeadersPath = FMP_BASE_URL + "/stable/" + leaderType;
+        String marketLeadersPath = FMP_BASE_URL + leaderType;
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(marketLeadersPath)
                 .queryParam("apikey", apiKey);
         try {

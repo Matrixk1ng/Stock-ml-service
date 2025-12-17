@@ -13,7 +13,7 @@ import { useParams } from "next/navigation";
 import {
   HistoricalChart,
   MappedFinnhubQuote,
-  HistoricalChartApiResponse,
+  //HistoricalChartApiResponse,
   CompanyProfile,
   News,
   PriceChange,
@@ -91,7 +91,7 @@ export default function StockDetailPage() {
   });
 
   const { data: historicalFullPriceData, error: historicalFullPriceError } =
-    useSWR<HistoricalChartApiResponse>(
+    useSWR<HistoricalChart[]>(
       ["daily-chart", symbol], // UNIQUE KEY
       historicalFullPriceFetcher,
       {
@@ -162,13 +162,13 @@ export default function StockDetailPage() {
           .reverse();
       }
       case "1M": {
-        const oneMonthOfData = historicalFullPriceData.historical.slice(0, 21); // Approx. 22 trading days in a month
+        const oneMonthOfData = historicalFullPriceData.slice(0, 21); // Approx. 22 trading days in a month
         return oneMonthOfData
-          .map((p) => ({ date: p.date, price: p.close }))
+          .map((p) => ({ date: p.date, price: Number(p.close) }))
           .reverse();
       }
       case "ytd": {
-        const currentYear = historicalFullPriceData.historical.filter((entry) =>
+        const currentYear = historicalFullPriceData.filter((entry) =>
           entry.date.startsWith("2025")
         );
         const yearToDate = currentYear.map((p) => ({
@@ -178,7 +178,7 @@ export default function StockDetailPage() {
         return yearToDate.reverse();
       }
       case "1Y": {
-        const oneYear = historicalFullPriceData.historical.slice(0, 251);
+        const oneYear = historicalFullPriceData.slice(0, 251);
         const oneWholeYear = oneYear
           .map((p) => ({
             date: p.date,

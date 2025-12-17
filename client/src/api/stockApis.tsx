@@ -1,4 +1,4 @@
-import { StockQuote, HistoricalChart,FinnhubQuote, MappedFinnhubQuote, MarketLeader, UniversalStockList, HistoricalChartApiResponse, CompanyProfile, Screener, sectors, PriceChange} from "@/types/stock"; // Adjust path as needed
+import { StockQuote, HistoricalChart,FinnhubQuote, MappedFinnhubQuote, MarketLeader, UniversalStockList, CompanyProfile, Screener, sectors, PriceChange} from "@/types/stock"; // Adjust path as needed
 
 // Get the base URL from environment variables
 const API_BASE_URL = process.env.NEXT_PUBLIC_STOCK_API_BASE_URL;
@@ -87,9 +87,9 @@ export const getHistoricalChart = (symbol: string): Promise<HistoricalChart[]> =
   return stock
 };
 
-export const getHistoricalFullPriceChart = (symbol: string): Promise<HistoricalChartApiResponse> => {
+export const getHistoricalFullPriceChart = (symbol: string): Promise<HistoricalChart[]> => {
   // Assuming you have an endpoint like this for testing caching
-  const stock = fetchAPI<HistoricalChartApiResponse>(`/historical-price-full/${symbol}`);
+  const stock = fetchAPI<HistoricalChart[]>(`/historical-price-full/${symbol}`);
   console.log(stock)
   return stock
 };
