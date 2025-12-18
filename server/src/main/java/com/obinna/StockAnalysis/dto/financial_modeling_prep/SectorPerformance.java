@@ -6,6 +6,7 @@ import lombok.Setter;
 @Getter
 @Setter
 public class SectorPerformance {
+    private String date;
     private String sector;
-    private String changesPercentage;
+    private String averageChange;
 }

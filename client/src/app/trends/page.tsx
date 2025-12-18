@@ -15,60 +15,66 @@ import { getSectorPerformance, getStockScreener } from "@/api/stockApis";
 import useSWR from "swr";
 import { useMemo } from "react";
 
+const SECTORS = [
+  "Technology",
+  "Healthcare",
+  "Financial Services",
+  "Consumer Cyclical",
+  "Energy",
+  "Industrials",
+  "Real Estate",
+  "Utilities",
+  "Basic Materials",
+  "Communication Services",
+  "Consumer Defensive",
+];
+
 const sectorPerformance = () => getSectorPerformance();
 
 // calls the stock screnner api to get the volumns
 const volumeSpikes = () => getStockScreener();
 
-
-// Mock data for historical prices
-// const mockHistoricalPrices = [
-//   { date: "2024-01-01", price: 180.5 },
-//   { date: "2024-01-02", price: 182.3 },
-//   { date: "2024-01-03", price: 181.8 },
-//   { date: "2024-01-04", price: 183.2 },
-//   { date: "2024-01-05", price: 184.5 },
-//   { date: "2024-01-06", price: 183.9 },
-//   { date: "2024-01-07", price: 185.2 },
-// ];
-
 export default function TrendsPage() {
-  const { data: sector} = useSWR<sectors[]>( // <-- Use the array type here
-    "sectors-performance", 
+  const { data: sector } = useSWR<sectors[]>( // <-- Use the array type here
+    "sectors-performance",
     sectorPerformance, // The fetcher uses the key
     { revalidateOnFocus: false }
   );
 
-  const { data: volume} = useSWR<Screener[]>( // <-- Use the array type here
+  const { data: volume } = useSWR<Screener[]>( // <-- Use the array type here
     "volume-spike", // The key is an array
     volumeSpikes, // The fetcher uses the key
     { revalidateOnFocus: false }
   );
+  const latestDate = useMemo(() => {
+    if (!sector || sector.length === 0) return null;
+    return sector.map((s) => s.date).sort((a, b) => b.localeCompare(a))[0];
+  }, [sector]);
 
- 
-
-  // const { data: historicalPrices = mockHistoricalPrices } = useQuery({
-  //   queryKey: ["historicalPrices"],
-  //   queryFn: async () => {
-  //     // Replace with actual API call
-  //     return mockHistoricalPrices;
-  //   },
-  // });
 
   const stocksWithVolumeSpikes = useMemo(() => {
-  // 1. Make sure you have data to work with
-  if (!volume) {
-    return [];
-  }
+    // 1. Make sure you have data to work with
+    if (!volume) {
+      return [];
+    }
+    // 2. Filter the stocks
+    const sortedByVolume = [...volume].sort((a, b) => b.volume - a.volume);
+    // 3. Sort the results to show the biggest spikes first
+    return sortedByVolume.slice(0, 5);
+  }, [volume]); // This logic re-runs only when screenerData changes
 
-  // 2. Filter the stocks
- const sortedByVolume = [...volume].sort((a, b) => b.volume - a.volume);
+  const sectorPerformanceMap = useMemo(() => {
+    if (!sector || !latestDate) return new Map<string, number>();
 
-  // 3. Sort the results to show the biggest spikes first
-  return sortedByVolume.slice(0, 5);
+    const map = new Map<string, number>();
+    sector
+      .filter((s) => s.date === latestDate)
+      .forEach((s) => {
+        map.set(s.sector, Number(s.averageChange));
+      });
 
-}, [volume]); // This logic re-runs only when screenerData changes
-
+    return map;
+  }, [sector, latestDate]);
 
   return (
     <div className="space-y-8 text-black">
@@ -78,31 +84,36 @@ export default function TrendsPage() {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <h2 className="text-xl font-semibold mb-4 text-black">
           Sector Performance
+          {latestDate && (
+            <span className="ml-2 text-sm text-gray-500">({latestDate})</span>
+          )}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {sector?.map((sector) => {
+          {SECTORS.map((sectorName) => {
             // --- FIX IS HERE ---
             // 1. Convert the string to a number for the comparison.
-            const performanceValue = parseFloat(sector.changesPercentage);
+            const performanceValue = sectorPerformanceMap.get(sectorName);
 
             return (
               <div
-                key={sector.sector}
+                key={sectorName}
                 className="p-4 rounded-lg border border-gray-200"
               >
                 <h3 className="text-sm font-medium text-gray-900">
-                  {sector.sector}
+                  {sectorName}
                 </h3>
-                <p
-                  // 2. Use the new number for the color logic.
-                  className={`mt-1 text-lg font-semibold ${
-                    performanceValue >= 0 ? "text-green-600" : "text-red-600"
-                  }`}
-                >
-                  {performanceValue >= 0 ? "+" : ""}
-                  {/* 3. Display the original, pre-formatted string. */}
-                  {performanceValue.toFixed(2)} %
-                </p>
+                {performanceValue !== undefined ? (
+                  <p
+                    className={`mt-1 text-lg font-semibold ${
+                      performanceValue >= 0 ? "text-green-600" : "text-red-600"
+                    }`}
+                  >
+                    {performanceValue >= 0 ? "+" : ""}
+                    {performanceValue.toFixed(2)} %
+                  </p>
+                ) : (
+                  <p className="mt-1 text-sm text-gray-400">N/A</p>
+                )}
               </div>
             );
           })}
@@ -145,11 +156,8 @@ export default function TrendsPage() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {stock.volume.toLocaleString()}
                   </td>
-                  
-                  <td
-                    className="px-6 py-4 whitespace-nowrap text-sm"
-                  >
-                    
+
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
                     {stock.price}
                   </td>
                 </tr>

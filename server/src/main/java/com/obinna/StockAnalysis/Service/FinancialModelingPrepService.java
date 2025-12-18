@@ -9,7 +9,13 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -17,56 +23,81 @@ import java.util.logging.Logger;
 public class FinancialModelingPrepService {
     private final String FMP_BASE_URL = "https://financialmodelingprep.com/stable/";
     private static final Logger LOGGER = Logger.getLogger(FinancialModelingPrepService.class.getName());
+    private static final List<String> SECTORS = List.of(
+            "Technology",
+            "Healthcare",
+            "Financial Services",
+            "Consumer Cyclical",
+            "Energy",
+            "Industrials",
+            "Real Estate",
+            "Utilities",
+            "Basic Materials",
+            "Communication Services",
+            "Consumer Defensive");
 
     private final RestTemplate restTemplate;
 
     private final String apiKey;
 
-
     public FinancialModelingPrepService(RestTemplate restTemplate, @Value("${FMP.api.key}") String apiKey) {
         this.restTemplate = restTemplate;
         this.apiKey = apiKey;
     }
+
     private boolean isApiKeyInvalid() {
         return apiKey == null || apiKey.isEmpty() || "YOUR_FMP_API_KEY".equals(apiKey);
     }
 
     @Cacheable(value = "sector")
-    public SectorPerformance [] getSectorPerformance(){
+    public SectorPerformance[] getSectorPerformance() {
+        List<SectorPerformance> results = new ArrayList<>();
         if (isApiKeyInvalid()) {
             LOGGER.warning("FMP API Key is invalid or not configured.");
             return new SectorPerformance[0];
         }
 
-        String screenerPath = FMP_BASE_URL + "sectors-performance";
-        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(screenerPath)
-                .queryParam("apikey", apiKey);
-        try {
-            SectorPerformance [] response;
-            response = restTemplate.getForObject(uriBuilder.toUriString(), SectorPerformance[].class);
-            return response;
-        } catch (HttpClientErrorException e) {
-            LOGGER.log(Level.SEVERE, "HTTP Client Error fetching sector performance " + e.getStatusCode(), e);
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error fetching sector performance from FMP", e);
+        String screenerPath = FMP_BASE_URL + "historical-sector-performance";
+        String today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+        for (String sector : SECTORS) {
+            String encodedSector = URLEncoder.encode(sector, StandardCharsets.UTF_8);
+            UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(screenerPath)
+                    .queryParam("sector", encodedSector)
+                    .queryParam("from", today)
+                    .queryParam("to", today)
+                    .queryParam("apikey", apiKey);
+            try {
+                SectorPerformance[] response;
+                response = restTemplate.getForObject(uriBuilder.toUriString(), SectorPerformance[].class);
+                if (response != null && response.length > 0) {
+                    results.add(response[0]); // one per sector
+                }
+
+            } catch (HttpClientErrorException e) {
+                LOGGER.log(Level.SEVERE, "HTTP Client Error fetching sector performance " + e.getStatusCode(), e);
+            } catch (Exception e) {
+                LOGGER.log(Level.SEVERE, "Error fetching sector performance from FMP", e);
+            }
         }
-        return new SectorPerformance[0];
+        return results.toArray(new SectorPerformance[0]);
     }
 
-
     @Cacheable(value = "screener")
-    public Screener [] getStockScreener(){
+    public Screener[] getStockScreener() {
         if (isApiKeyInvalid()) {
             LOGGER.warning("FMP API Key is invalid or not configured.");
             return new Screener[0];
         }
 
-        String screenerPath = FMP_BASE_URL + "stock-screener";
+        String screenerPath = FMP_BASE_URL + "company-screener";
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(screenerPath)
                 .queryParam("country", "US")
+                .queryParam("isEtf", false)
+                .queryParam("isFund", false)
+                .queryParam("isActivelyTrading", true)
                 .queryParam("apikey", apiKey);
         try {
-            Screener [] response;
+            Screener[] response;
             response = restTemplate.getForObject(uriBuilder.toUriString(), Screener[].class);
             return response;
         } catch (HttpClientErrorException e) {
@@ -78,23 +109,24 @@ public class FinancialModelingPrepService {
     }
 
     @Cacheable(value = "profile", key = "#symbol")
-    public CompanyProfile getCompanyProfile(String symbol){
+    public CompanyProfile getCompanyProfile(String symbol) {
         if (isApiKeyInvalid()) {
             LOGGER.warning("FMP API Key is invalid or not configured.");
             return null;
         }
         String profilePath = FMP_BASE_URL + "profile";
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(profilePath)
-                .queryParam("symbol",symbol)
+                .queryParam("symbol", symbol)
                 .queryParam("apikey", apiKey);
         try {
-            CompanyProfile [] response;
+            CompanyProfile[] response;
             response = restTemplate.getForObject(uriBuilder.toUriString(), CompanyProfile[].class);
             if (response != null && response.length > 0) {
                 return response[0]; // <-- This is the successful return
             }
         } catch (HttpClientErrorException e) {
-            LOGGER.log(Level.SEVERE, "HTTP Client Error fetching Company Profile for " + symbol + ": " + e.getStatusCode(), e);
+            LOGGER.log(Level.SEVERE,
+                    "HTTP Client Error fetching Company Profile for " + symbol + ": " + e.getStatusCode(), e);
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error fetching Company Profile for " + symbol + " from FMP", e);
         }
@@ -102,7 +134,7 @@ public class FinancialModelingPrepService {
     }
 
     @Cacheable(value = "priceChanges", key = "#symbol")
-    public PriceChange getPriceChange(String symbol){
+    public PriceChange getPriceChange(String symbol) {
         if (isApiKeyInvalid()) {
             LOGGER.warning("FMP API Key is invalid or not configured.");
             return null;
@@ -112,18 +144,19 @@ public class FinancialModelingPrepService {
 
         // Build the full URL with the API key
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(historicalDataPath)
-                .queryParam("symbol",symbol)
+                .queryParam("symbol", symbol)
                 .queryParam("apikey", apiKey);
         try {
             // Make the API call and map the response to your wrapper class
-            PriceChange [] response;
+            PriceChange[] response;
             response = restTemplate.getForObject(uriBuilder.toUriString(), PriceChange[].class);
             if (response != null && response.length > 0) {
                 return response[0]; // <-- This is the successful return
             }
 
         } catch (HttpClientErrorException e) {
-            LOGGER.log(Level.SEVERE, "HTTP Client Error fetching historical data for " + symbol + ": " + e.getStatusCode(), e);
+            LOGGER.log(Level.SEVERE,
+                    "HTTP Client Error fetching historical data for " + symbol + ": " + e.getStatusCode(), e);
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error fetching historical data for " + symbol + " from FMP", e);
         }
@@ -132,8 +165,8 @@ public class FinancialModelingPrepService {
     }
 
     @Cacheable(value = "historicalDaily", key = "#symbol")
-    //1M", "6M", "1Y" Chart Views
-    public HistoricalChart [] getHistoricalDailyChart(String symbol) {
+    // 1M", "6M", "1Y" Chart Views
+    public HistoricalChart[] getHistoricalDailyChart(String symbol) {
         // Return null if the API key is missing
         if (isApiKeyInvalid()) {
             LOGGER.warning("FMP API Key is invalid or not configured.");
@@ -145,19 +178,21 @@ public class FinancialModelingPrepService {
 
         // Build the full URL with the API key
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(historicalDataPath)
-                .queryParam("symbol",symbol)
+                .queryParam("symbol", symbol)
                 .queryParam("apikey", apiKey);
 
         try {
             // Make the API call and map the response to your wrapper class
             HistoricalChart[] response;
             response = restTemplate.getForObject(uriBuilder.toUriString(), HistoricalChart[].class);
-            ObjectMapper mapper = new ObjectMapper();
-            System.out.println("EXECUTING FMP API CALL FOR getHistoricalFullChart:\n" + mapper.writerWithDefaultPrettyPrinter().writeValueAsString(response));
+            // ObjectMapper mapper = new ObjectMapper();
+            // System.out.println("EXECUTING FMP API CALL FOR getHistoricalFullChart:\n" +
+            // mapper.writerWithDefaultPrettyPrinter().writeValueAsString(response));
             return response != null ? response : new HistoricalChart[0];
 
         } catch (HttpClientErrorException e) {
-            LOGGER.log(Level.SEVERE, "HTTP Client Error fetching historical data for " + symbol + ": " + e.getStatusCode(), e);
+            LOGGER.log(Level.SEVERE,
+                    "HTTP Client Error fetching historical data for " + symbol + ": " + e.getStatusCode(), e);
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error fetching historical data for " + symbol + " from FMP", e);
         }
@@ -165,14 +200,15 @@ public class FinancialModelingPrepService {
         // Return null if there was any kind of error
         return new HistoricalChart[0];
     }
-    @Cacheable(value = "historicalChart", key="#symbol")
-    public HistoricalChart[] getHistoricalChart(String symbol){
+
+    @Cacheable(value = "historicalChart", key = "#symbol")
+    public HistoricalChart[] getHistoricalChart(String symbol) {
         if (isApiKeyInvalid()) {
             return new HistoricalChart[0];
         }
         String stockSymbol = FMP_BASE_URL + "historical-chart/5min";
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(stockSymbol)
-                .queryParam("symbol",symbol)
+                .queryParam("symbol", symbol)
                 .queryParam("apikey", apiKey);
         try {
             HistoricalChart[] response;
@@ -180,16 +216,17 @@ public class FinancialModelingPrepService {
             System.out.println("EXECUTING FMP API CALL FOR getHistoricalChart: " + symbol);
             return response;
         } catch (HttpClientErrorException e) {
-            LOGGER.log(Level.SEVERE, "HTTP Client Error while fetching " + symbol +": " + e.getStatusCode() + " " + e.getResponseBodyAsString(), e);
+            LOGGER.log(Level.SEVERE, "HTTP Client Error while fetching " + symbol + ": " + e.getStatusCode() + " "
+                    + e.getResponseBodyAsString(), e);
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error fetching " + symbol + " stock from Financial Modeling Prep", e);
         }
 
-
         return new HistoricalChart[0];
     }
+
     @Cacheable(value = "quotes", key = "#symbol")
-    public StockQuote getStockQuote(String symbol){
+    public StockQuote getStockQuote(String symbol) {
         if (isApiKeyInvalid()) {
             return new StockQuote();
         }
@@ -204,14 +241,16 @@ public class FinancialModelingPrepService {
                 return response[0]; // <-- This is the successful return
             }
         } catch (HttpClientErrorException e) {
-            LOGGER.log(Level.SEVERE, "HTTP Client Error while fetching " + symbol +": " + e.getStatusCode() + " " + e.getResponseBodyAsString(), e);
+            LOGGER.log(Level.SEVERE, "HTTP Client Error while fetching " + symbol + ": " + e.getStatusCode() + " "
+                    + e.getResponseBodyAsString(), e);
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error fetching " + symbol + " stock from Financial Modeling Prep", e);
         }
         return new StockQuote();
     }
+
     @Cacheable(value = "marketLeaders", key = "#leaderType")
-    public MarketLeader[] getMarketLeader(String leaderType){
+    public MarketLeader[] getMarketLeader(String leaderType) {
         if (isApiKeyInvalid()) {
             return new MarketLeader[0];
         }
@@ -224,9 +263,11 @@ public class FinancialModelingPrepService {
             response = restTemplate.getForObject(uriBuilder.toUriString(), MarketLeader[].class);
             return response;
         } catch (HttpClientErrorException e) {
-            LOGGER.log(Level.SEVERE, "HTTP Client Error while fetching top" + leaderType +": " + e.getStatusCode() + " " + e.getResponseBodyAsString(), e);
+            LOGGER.log(Level.SEVERE, "HTTP Client Error while fetching top" + leaderType + ": " + e.getStatusCode()
+                    + " " + e.getResponseBodyAsString(), e);
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error fetching " +leaderType+ " Universal Listing from Financial Modeling Prep", e);
+            LOGGER.log(Level.SEVERE, "Error fetching " + leaderType + " Universal Listing from Financial Modeling Prep",
+                    e);
         }
         return new MarketLeader[0];
     }

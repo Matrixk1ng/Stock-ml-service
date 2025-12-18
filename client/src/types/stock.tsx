@@ -144,8 +144,9 @@ export interface Screener {
 }
 
 export interface sectors {
+    date: string,
     sector: string;
-    changesPercentage: string;
+    averageChange: string;
 }
 
 export interface News {

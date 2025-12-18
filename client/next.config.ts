@@ -5,7 +5,8 @@ const nextConfig: NextConfig = {
     domains: [
       'static2.finnhub.io',      // ← allow images from here
       'image.cnbcfm.com',
-      'data.bloomberglp.com'
+      'data.bloomberglp.com',
+      'fm.cnbc.com'
       // add any other hosts you need, e.g.:
       // 'example.com',
     ],
