@@ -17,16 +17,23 @@ import {
   CompanyProfile,
   News,
   PriceChange,
+  MlSignal,
+  MlDriver,
 } from "@/types/stock";
 import {
   getHistoricalChart,
   getFinnhubQuote,
-  getHistoricalFullPriceChart,
+
   getCompanyProfile,
   getPriceChange,
 } from "@/api/stockApis";
 import { useMemo, useState } from "react";
 import { getCompanyNews } from "@/api/newsApis";
+import { fetchMlSignals, getHistoricalFullPriceChart } from "@/api/rdsApis";
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const mlSignalsFetcher = ([_key, symbol]: [string, string]) =>
+  fetchMlSignals(symbol);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const priceChanges = ([_key, symbol]: [string, string]) =>
@@ -58,6 +65,13 @@ const companyProfileFetch = ([_key, symbol]: [string, string]) =>
 export default function StockDetailPage() {
   const params = useParams();
   const symbol = params.symbol as string;
+
+  const { data: mlSignals, error: mlSignalsError } = useSWR<MlSignal[]>(
+    ["ml-signals", symbol],
+    mlSignalsFetcher,
+    { revalidateOnFocus: false, refreshInterval: 24 * 60 * 60 * 1000 }
+  );
+
   const [chartTimeframe, setChartTimeframe] = useState<
     "1D" | "5D" | "1M" | "ytd" | "1Y"
   >("1D");
@@ -204,7 +218,7 @@ export default function StockDetailPage() {
     if (chartTimeframe === "1D" && previousClose !== undefined) {
       dollarChange = currentPrice - previousClose;
     } else if (chartData.length > 0 && chartData[0].price !== null) {
-      console.log("chartData[0].price",chartData[0].price)
+      console.log("chartData[0].price", chartData[0].price);
       dollarChange = currentPrice - Number(chartData[0].price);
     }
   }
@@ -214,7 +228,44 @@ export default function StockDetailPage() {
 
   const dollarChangeNumber =
     dollarChangeDisplay !== null ? parseFloat(dollarChangeDisplay) : null;
+  type Driver = { feature: string; value: number; pct: number };
 
+  const latestSignal = mlSignals?.[0];
+
+  const driverName = (f: string) => {
+    const map: Record<string, string> = {
+      vol_30d: "30d Volatility",
+      vol_14d: "14d Volatility",
+      volume_z_30d: "Volume spike (z-score)",
+      drawdown_30d: "30d Drawdown",
+      beta_60d: "60d Beta",
+      corr_60d: "60d Corr to SPY",
+      rsi_14: "RSI (14)",
+      log_return_1d: "1d Return",
+      log_return_7d: "7d Return",
+      log_return_14d: "14d Return",
+    };
+    return map[f] ?? f;
+  };
+
+  const topDrivers: Driver[] = useMemo(() => {
+    if (!latestSignal?.driversJson) return [];
+    try {
+      const obj = JSON.parse(latestSignal.driversJson);
+      return (obj?.top_drivers ?? []) as Driver[];
+    } catch {
+      return [];
+    }
+  }, [latestSignal]);
+
+  const riskHistory = useMemo(() => {
+    if (!mlSignals?.length) return [];
+    // repo returns DESC, so reverse for chart
+    return [...mlSignals].reverse().map((s) => ({
+      date: s.signalDate,
+      risk: s.riskScore,
+    }));
+  }, [mlSignals]);
   if (isLoading)
     return (
       <div className="p-8 text-center text-gray-500">
@@ -227,7 +278,48 @@ export default function StockDetailPage() {
         Failed to load stock data.
       </div>
     );
+  const DriverBar = ({ driver }: { driver: MlDriver }) => {
+    const isHighRisk = driver.pct > 0.8 || driver.pct < 0.2;
 
+    return (
+      <div className="flex flex-col gap-1 py-2 border-b last:border-0 border-gray-100">
+        <div className="flex justify-between items-end">
+          <div>
+            <span className="text-sm font-semibold text-gray-800">
+              {driverName(driver.feature)}
+            </span>
+            <p className="text-[10px] text-gray-400 font-mono">
+              {driver.feature}
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="text-sm font-bold">
+              {Number(driver.value).toFixed(2)}
+            </span>
+            <span
+              className={`ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                isHighRisk
+                  ? "bg-orange-100 text-orange-700"
+                  : "bg-blue-50 text-blue-600"
+              }`}
+            >
+              {(driver.pct * 100).toFixed(0)}th Pct
+            </span>
+          </div>
+        </div>
+
+        {/* Progress Bar representing the percentile */}
+        <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full ${
+              isHighRisk ? "bg-orange-500" : "bg-blue-400"
+            }`}
+            style={{ width: `${driver.pct * 100}%` }}
+          />
+        </div>
+      </div>
+    );
+  };
   return (
     <div className="space-y-8 bg-white text-black min-h-screen p-8">
       {/* Stock Header */}
@@ -342,14 +434,25 @@ export default function StockDetailPage() {
                   Market Cap
                 </dt>
                 <dd className="mt-1 text-sm text-gray-900">
-                  ${companyProfile?.mktCap.toLocaleString()}
+                  $
+                  {companyProfile?.marketCap
+                    ? `$${
+                        companyProfile.marketCap >= 1e12
+                          ? (companyProfile.marketCap / 1e12).toFixed(2) + "T"
+                          : companyProfile.marketCap >= 1e9
+                          ? (companyProfile.marketCap / 1e9).toFixed(2) + "B"
+                          : companyProfile.marketCap >= 1e6
+                          ? (companyProfile.marketCap / 1e6).toFixed(2) + "M"
+                          : companyProfile.marketCap.toLocaleString()
+                      }`
+                    : "N/A"}
                 </dd>
               </div>
 
               <div>
                 <dt className="text-sm font-medium text-gray-500">Dividend</dt>
                 <dd className="mt-1 text-sm text-gray-900">
-                  ${companyProfile?.lasDiv}
+                  ${companyProfile?.lastDividend}
                 </dd>
               </div>
               <div>
@@ -357,9 +460,9 @@ export default function StockDetailPage() {
                   Dividend Yield
                 </dt>
                 <dd className="mt-1 text-sm text-gray-900">
-                  {companyProfile?.lasDiv && companyProfile?.price
+                  {companyProfile?.lastDividend && companyProfile?.price
                     ? (
-                        (companyProfile.lasDiv / companyProfile.price) *
+                        (companyProfile.lastDividend / companyProfile.price) *
                         100
                       ).toFixed(2) + "%"
                     : "N/A"}
@@ -368,7 +471,7 @@ export default function StockDetailPage() {
               <div>
                 <dt className="text-sm font-medium text-gray-500">Volume</dt>
                 <dd className="mt-1 text-sm text-gray-900">
-                  {companyProfile?.volAvg.toLocaleString()}
+                  {companyProfile?.averageVolume?.toLocaleString()}
                 </dd>
               </div>
             </dl>
@@ -384,6 +487,115 @@ export default function StockDetailPage() {
             <h2 className="text-xl font-semibold mb-4">
               Company Information not Available
             </h2>
+          </div>
+        )}
+      </div>
+      {/* ML Insights */}
+      <div className="bg-white rounded-xl shadow-sm border border-black p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">ML Insights</h2>
+          {mlSignalsError && (
+            <span className="text-sm text-red-600">Signals unavailable</span>
+          )}
+        </div>
+
+        {!latestSignal ? (
+          <div className="text-gray-500">Loading ML signals...</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Left: Summary + Risk history */}
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <div className="text-sm text-gray-500">Risk Score</div>
+                  <div className="text-3xl font-bold">
+                    {latestSignal.riskScore}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <div className="text-sm text-gray-500">Regime</div>
+                  <div className="text-lg font-semibold">
+                    {latestSignal.regimeLabel}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <div className="text-sm text-gray-500">Last Updated</div>
+                  <div className="text-lg font-semibold">
+                    {latestSignal.signalDate}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 p-4">
+                <div className="text-sm font-medium mb-2">
+                  Risk History (180d)
+                </div>
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={riskHistory}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 12 }}
+                        interval={Math.ceil(riskHistory.length / 6)}
+                        tickFormatter={(d) => d.slice(5)}
+                      />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Line
+                        type="monotone"
+                        dataKey="risk"
+                        stroke="#111827"
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Why panel */}
+            <div className="rounded-xl border border-gray-200 p-4">
+              <div className="text-lg font-semibold mb-2">
+                Why (top drivers)
+              </div>
+
+              {topDrivers.length === 0 ? (
+                <div className="text-gray-500">No drivers available yet.</div>
+              ) : (
+                // <ul className="space-y-3">
+                //   {topDrivers.slice(0, 3).map((d) => (
+                //     <li
+                //       key={d.feature}
+                //       className="flex items-center justify-between"
+                //     >
+                //       <div>
+                //         <div className="font-medium">
+                //           {driverName(d.feature)}
+                //         </div>
+                //         <div className="text-xs text-gray-500">{d.feature}</div>
+                //       </div>
+                //       <div className="text-right">
+                //         <div className="text-sm font-semibold">
+                //           {Number(d.value).toFixed(4)}
+                //         </div>
+                //         <div className="text-xs text-gray-500">
+                //           pct: {(d.pct * 100).toFixed(0)}%
+                //         </div>
+                //       </div>
+                //     </li>
+                //   ))}
+                // </ul>
+                <div className="space-y-4">
+                  {topDrivers.slice(0, 5).map((driver) => (
+                    <DriverBar key={driver.feature} driver={driver} />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

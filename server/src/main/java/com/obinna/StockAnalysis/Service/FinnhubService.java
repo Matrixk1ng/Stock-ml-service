@@ -119,6 +119,8 @@ public class FinnhubService {
     // get universal stock listings
     @Cacheable("allUsStocks")
     public UniversalStockList[] getUniversalStockList() {
+        System.out.println(apiKey + "FINNHUB KEY len=" + apiKey.length() + " starts=" + apiKey.substring(0, 6));
+
         if (isApiKeyInvalid()) {
             return new UniversalStockList[0];
         }

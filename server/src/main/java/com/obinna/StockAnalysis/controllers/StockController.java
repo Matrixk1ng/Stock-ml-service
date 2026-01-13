@@ -1,5 +1,6 @@
 package com.obinna.StockAnalysis.controllers;
 
+import com.obinna.StockAnalysis.Service.StockBatchRunner;
 import com.obinna.StockAnalysis.StockInfo;
 import com.obinna.StockAnalysis.Service.AlphaVantageService;
 import com.obinna.StockAnalysis.Service.FinancialModelingPrepService;
@@ -10,10 +11,7 @@ import com.obinna.StockAnalysis.dto.financial_modeling_prep.*;
 import com.obinna.StockAnalysis.dto.finnhub.UniversalStockList;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
 import java.util.List;
@@ -25,55 +23,70 @@ public class StockController {
     private final AlphaVantageService alphaVantageService;
     private final FinnhubService finnhubService;
     private final FinancialModelingPrepService financialModelingPrepService;
+    private final StockBatchRunner batchRunner;
 
-    public StockController(AlphaVantageService alphaVantageService, FinnhubService finnhubService, FinancialModelingPrepService financialModelingPrepService) {
+    public StockController(AlphaVantageService alphaVantageService, FinnhubService finnhubService,
+            FinancialModelingPrepService financialModelingPrepService, StockBatchRunner batchRunner) {
         this.alphaVantageService = alphaVantageService;
         this.finnhubService = finnhubService;
         this.financialModelingPrepService = financialModelingPrepService;
+        this.batchRunner = batchRunner;
     }
+
+    @PostMapping("/ingest-batch")
+    public ResponseEntity<Void> ingestBatch(@RequestBody List<String> symbols) throws InterruptedException {
+        batchRunner.ingestAll(symbols);
+        return ResponseEntity.accepted().build();
+    }
+
     @GetMapping("/sectors-performance")
-    public ResponseEntity <SectorPerformance[]> getSectorPerformance(){
+    public ResponseEntity<SectorPerformance[]> getSectorPerformance() {
         SectorPerformance[] sectors = financialModelingPrepService.getSectorPerformance();
-        if(sectors.length == 0){
+        if (sectors.length == 0) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
         return ResponseEntity.ok(sectors);
     }
+
     @GetMapping("/stock-screener")
-    public ResponseEntity <Screener[]> getStockScreener(){
+    public ResponseEntity<Screener[]> getStockScreener() {
         Screener[] screener = financialModelingPrepService.getStockScreener();
-        if (screener.length == 0){
+        if (screener.length == 0) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
         return ResponseEntity.ok(screener);
 
     }
+
     @GetMapping("/company-profile/{symbol}")
-    public ResponseEntity<CompanyProfile> getCompanyProfile(@PathVariable String symbol){
-        CompanyProfile profile = financialModelingPrepService.getCompanyProfile(symbol);
-        if(profile == null){
+    public ResponseEntity<CompanyProfile> getCompanyProfile(@PathVariable String symbol) {
+        CompanyProfile[] profileArray = financialModelingPrepService.getCompanyProfile(symbol);
+
+        if (profileArray == null || profileArray.length == 0) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
-        return ResponseEntity.ok(profile);
+        return ResponseEntity.ok(profileArray[0]); // Return first element
     }
 
     // price changes from 1D to 10 years
     @GetMapping("/stock-price-change/{symbol}")
-    public ResponseEntity<PriceChange> getPriceChange(@PathVariable String symbol){
+    public ResponseEntity<PriceChange> getPriceChange(@PathVariable String symbol) {
         PriceChange stockPriceChange = financialModelingPrepService.getPriceChange(symbol);
-        if (stockPriceChange == null){
+        if (stockPriceChange == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
         return ResponseEntity.ok(stockPriceChange);
     }
+
     // gets after hours data, ran every 5 min till 8
     @GetMapping("/after-hours/{symbol}")
-    public ResponseEntity<IntradayApiResponse> getAfterHours(@PathVariable String symbol){
+    public ResponseEntity<IntradayApiResponse> getAfterHours(@PathVariable String symbol) {
         IntradayApiResponse afterHoursData = alphaVantageService.getAfterHours(symbol);
-        if (afterHoursData == null || afterHoursData.getTimeSeries() == null || afterHoursData.getTimeSeries().isEmpty()) {
+        if (afterHoursData == null || afterHoursData.getTimeSeries() == null
+                || afterHoursData.getTimeSeries().isEmpty()) {
 
             // If any check fails, return a 404 Not Found error.
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
@@ -82,12 +95,14 @@ public class StockController {
         // If all checks pass, return the data with a 200 OK status.
         return ResponseEntity.ok(afterHoursData);
     }
-    //gets historical data for the past 5 years to use for 1M, 6M and 1Y views
+
+    // gets historical data for the past 5 years to use for 1M, 6M and 1Y views
     @GetMapping("/historical-price-full/{symbol}")
     public ResponseEntity<List<HistoricalChart>> getHistoricalDailyChart(@PathVariable String symbol) {
 
         // Call the new service method
-        List<HistoricalChart> historicalData = Arrays.asList(financialModelingPrepService.getHistoricalDailyChart(symbol));
+        List<HistoricalChart> historicalData = Arrays
+                .asList(financialModelingPrepService.getHistoricalDailyChart(symbol));
 
         // Check if the service returned data or null (in case of an error)
         if (historicalData.isEmpty()) {
@@ -97,6 +112,7 @@ public class StockController {
         // If successful, return the data with a 200 OK status
         return ResponseEntity.ok(historicalData);
     }
+
     // get historical data in 5 min intervals for the bast 2 weeks
     // will be used for current day and past 5 days view and live view
     // every 5min
@@ -109,6 +125,7 @@ public class StockController {
         }
         return ResponseEntity.ok(historicalChart);
     }
+
     // used to get market summaries
     @GetMapping("/finnhub/quote/{symbol}")
     public ResponseEntity<FinnhubQuote> getFinnhubQuote(@PathVariable String symbol) {
@@ -131,6 +148,7 @@ public class StockController {
         }
         return ResponseEntity.ok(stockQuote);
     }
+
     // get top market gainers, losers and active stocks
     @GetMapping("/market-leaders/{leaderType}")
     public ResponseEntity<List<MarketLeader>> getMarketLeader(@PathVariable String leaderType) {
@@ -141,15 +159,16 @@ public class StockController {
         }
         return ResponseEntity.ok(marketLeaders);
     }
-    
+
     // get all stocks in the US stock exchange from finnhub
     @GetMapping("/all-us-symbols")
-    public ResponseEntity<List<UniversalStockList>> getUniversalStockList(){
+    public ResponseEntity<List<UniversalStockList>> getUniversalStockList() {
         List<UniversalStockList> universalStocks = Arrays.asList(finnhubService.getUniversalStockList());
-        if (universalStocks.isEmpty()) {
-            // Return a 404 Not Found status, and call .build()
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-        }
+        // if (universalStocks.isEmpty()) {
+        // // Return a 404 Not Found status, and call .build()
+        //
+        // return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        // }
         return ResponseEntity.ok(universalStocks);
     }
 
@@ -170,7 +189,8 @@ public class StockController {
     public ResponseEntity<StockInfo> getStockInfo(@PathVariable String symbol) {
         StockInfo stockInfo = alphaVantageService.getStockInfo(symbol);
         if (stockInfo.getErrorMessage() != null) {
-            // If there's an error message from the service, return it with an appropriate status
+            // If there's an error message from the service, return it with an appropriate
+            // status
             // For simplicity, let's use 404 if data is not found, 500 for API key issues
             if (stockInfo.getErrorMessage().contains("API key not configured")) {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(stockInfo);
@@ -179,9 +199,9 @@ public class StockController {
         }
         if (stockInfo.getName() == null && stockInfo.getPrice() == null) {
             // This case should be handled by errorMessage now, but as a fallback:
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new StockInfo("Data not found for symbol: " + symbol));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new StockInfo("Data not found for symbol: " + symbol));
         }
         return ResponseEntity.ok(stockInfo);
     }
 }
-

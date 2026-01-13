@@ -1,7 +1,8 @@
 package com.obinna.StockAnalysis.Service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.obinna.StockAnalysis.Repository.PriceIngestionRepository;
 import com.obinna.StockAnalysis.dto.financial_modeling_prep.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -11,11 +12,11 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -39,6 +40,9 @@ public class FinancialModelingPrepService {
     private final RestTemplate restTemplate;
 
     private final String apiKey;
+
+    @Autowired
+    private PriceIngestionRepository ingestionRepo;
 
     public FinancialModelingPrepService(RestTemplate restTemplate, @Value("${FMP.api.key}") String apiKey) {
         this.restTemplate = restTemplate;
@@ -99,6 +103,17 @@ public class FinancialModelingPrepService {
         try {
             Screener[] response;
             response = restTemplate.getForObject(uriBuilder.toUriString(), Screener[].class);
+            for (Screener screener : response) {
+                String symbol = screener.getSymbol().toUpperCase();
+                ingestionRepo.upsertStock(
+                        symbol,
+                        screener.getCompanyName(),
+                        screener.getSector(),
+                        screener.getIndustry(),
+                        screener.getMarketCap());
+
+                LOGGER.info("Seeded stock metadata for: " + symbol);
+            }
             return response;
         } catch (HttpClientErrorException e) {
             LOGGER.log(Level.SEVERE, "HTTP Client Error fetching Stock Screener " + e.getStatusCode(), e);
@@ -109,7 +124,7 @@ public class FinancialModelingPrepService {
     }
 
     @Cacheable(value = "profile", key = "#symbol")
-    public CompanyProfile getCompanyProfile(String symbol) {
+    public CompanyProfile[] getCompanyProfile(String symbol) {
         if (isApiKeyInvalid()) {
             LOGGER.warning("FMP API Key is invalid or not configured.");
             return null;
@@ -118,11 +133,11 @@ public class FinancialModelingPrepService {
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(profilePath)
                 .queryParam("symbol", symbol)
                 .queryParam("apikey", apiKey);
+        System.out.println("url: " + uriBuilder);
         try {
-            CompanyProfile[] response;
-            response = restTemplate.getForObject(uriBuilder.toUriString(), CompanyProfile[].class);
-            if (response != null && response.length > 0) {
-                return response[0]; // <-- This is the successful return
+            CompanyProfile[] response = restTemplate.getForObject(uriBuilder.toUriString(), CompanyProfile[].class);
+            if (response != null) {
+                return response; // <-- This is the successful return
             }
         } catch (HttpClientErrorException e) {
             LOGGER.log(Level.SEVERE,
@@ -164,7 +179,6 @@ public class FinancialModelingPrepService {
         return null;
     }
 
-    @Cacheable(value = "historicalDaily", key = "#symbol")
     // 1M", "6M", "1Y" Chart Views
     public HistoricalChart[] getHistoricalDailyChart(String symbol) {
         // Return null if the API key is missing
@@ -172,13 +186,17 @@ public class FinancialModelingPrepService {
             LOGGER.warning("FMP API Key is invalid or not configured.");
             return new HistoricalChart[0];
         }
+        syncStockMetadata(symbol);
 
+        String today = LocalDate.now().toString();
         // Build the specific path for this endpoint
         String historicalDataPath = FMP_BASE_URL + "historical-price-eod/full";
 
         // Build the full URL with the API key
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(historicalDataPath)
                 .queryParam("symbol", symbol)
+                // .queryParam("from", today)
+                // .queryParam("to", today)
                 .queryParam("apikey", apiKey);
 
         try {
@@ -188,6 +206,9 @@ public class FinancialModelingPrepService {
             // ObjectMapper mapper = new ObjectMapper();
             // System.out.println("EXECUTING FMP API CALL FOR getHistoricalFullChart:\n" +
             // mapper.writerWithDefaultPrettyPrinter().writeValueAsString(response));
+            if (response != null && response.length > 0) {
+                saveToDatabase(symbol, response);
+            }
             return response != null ? response : new HistoricalChart[0];
 
         } catch (HttpClientErrorException e) {
@@ -199,6 +220,60 @@ public class FinancialModelingPrepService {
 
         // Return null if there was any kind of error
         return new HistoricalChart[0];
+    }
+
+    private void syncStockMetadata(String symbol) {
+        // Fetch profile from FMP
+        ingestionRepo.ensureStockRowExists(symbol);
+        var meta = ingestionRepo.getStockMeta(symbol);
+        Instant now = Instant.now();
+
+        boolean missingCore = (meta == null)
+                || meta.sector() == null
+                || meta.industry() == null;
+
+        boolean stale = (meta == null)
+                || meta.lastMetadataRefresh() == null
+                || meta.lastMetadataRefresh().isBefore(now.minus(7, ChronoUnit.DAYS));
+
+        if (!(missingCore || stale)) {
+            return; // ✅ skip API call entirely
+        }
+        CompanyProfile[] profile = getCompanyProfile(symbol);
+
+        if (profile != null) {
+            // High performance upsert using JdbcTemplate
+            ingestionRepo.upsertStock(
+                    symbol,
+                    profile[0].getCompanyName(),
+                    profile[0].getSector(),
+                    profile[0].getIndustry(),
+                    profile[0].getMarketCap());
+            LOGGER.info("Metadata synced for " + symbol);
+        } else {
+            // If profile fetch fails, insert a shell record so prices don't crash
+            ingestionRepo.upsertStock(symbol, null, null, null, null);
+        }
+    }
+
+    // save to RDS
+    private void saveToDatabase(String symbol, HistoricalChart[] charts) {
+
+        List<PriceIngestionRepository.PriceRow> rows = Arrays.stream(charts)
+                .map(c -> new PriceIngestionRepository.PriceRow(
+                        symbol,
+                        LocalDate.parse(c.getDate()),
+                        Double.parseDouble(c.getOpen()),
+                        Double.parseDouble(c.getHigh()),
+                        Double.parseDouble(c.getLow()),
+                        Double.parseDouble(c.getClose()),
+                        Long.parseLong(c.getVolume())))
+                .toList();
+
+        if (!rows.isEmpty()) {
+            ingestionRepo.batchInsertIgnore(rows);
+            LOGGER.info("Saved batch for " + symbol + " (" + rows.size() + " rows)");
+        }
     }
 
     @Cacheable(value = "historicalChart", key = "#symbol")
@@ -225,13 +300,14 @@ public class FinancialModelingPrepService {
         return new HistoricalChart[0];
     }
 
-    @Cacheable(value = "quotes", key = "#symbol")
+    //@Cacheable(value = "quotes", key = "#symbol")
     public StockQuote getStockQuote(String symbol) {
         if (isApiKeyInvalid()) {
             return new StockQuote();
         }
-        String stockSymbol = FMP_BASE_URL + "quote/" + symbol;
+        String stockSymbol = FMP_BASE_URL + "quote";
         UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(stockSymbol)
+                .queryParam("symbol", symbol)
                 .queryParam("apikey", apiKey);
         try {
             StockQuote[] response;
@@ -271,5 +347,7 @@ public class FinancialModelingPrepService {
         }
         return new MarketLeader[0];
     }
+
+    // To get and ingest historical into AWS RDS
 
 }

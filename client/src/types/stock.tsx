@@ -7,13 +7,13 @@ export interface HistoricalChart {
     volume: number;
 
           // --- New fields from historical-price-full ---
-    adjClose: number;
-    unadjustedVolume: number;
-    change: number;
-    changePercent: number;
-    vwap: string;
-    label: string;
-    changeOverTime: number;
+    adjClose?: number;
+    unadjustedVolume?: number;
+    change?: number;
+    changePercent?: number;
+    vwap?: string;
+    label?: string;
+    changeOverTime?: number;
 }
 
 export interface HistoricalChartApiResponse {
@@ -91,9 +91,9 @@ export interface CompanyProfile {
     symbol: string;
     price: number;
     beta: number;
-    volAvg: number;
-    mktCap: number;
-    lasDiv: number;
+    averageVolume: number;
+    marketCap: number;
+    lastDividend: number;
     range: string;
     changes: number;
     companyName: string;
@@ -174,4 +174,19 @@ export interface PriceChange {
   "5Y": number;
   "10Y": number;
   max: number;
+}
+
+
+export type MlSignal = {
+  ticker: string;
+  signalDate: string;     // "YYYY-MM-DD"
+  regimeLabel: string;    // "SIDEWAYS" | "TREND_UP" | etc
+  riskScore: number;      // 0-100
+  driversJson: string;    // JSON string
+};
+
+export interface MlDriver {
+  feature: string;
+  value: number | null;
+  pct: number; // The percentile we calculated
 }

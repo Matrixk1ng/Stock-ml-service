@@ -87,12 +87,12 @@ export const getHistoricalChart = (symbol: string): Promise<HistoricalChart[]> =
   return stock
 };
 
-export const getHistoricalFullPriceChart = (symbol: string): Promise<HistoricalChart[]> => {
-  // Assuming you have an endpoint like this for testing caching
-  const stock = fetchAPI<HistoricalChart[]>(`/historical-price-full/${symbol}`);
-  console.log(stock)
-  return stock
-};
+// export const getHistoricalFullPriceChart = (symbol: string): Promise<HistoricalChart[]> => {
+//   // Assuming you have an endpoint like this for testing caching
+//   const stock = fetchAPI<HistoricalChart[]>(`/historical-price-full/${symbol}`);
+//   console.log(stock)
+//   return stock
+// };
 
 // CORRECT: Promises an ARRAY of MarketLeader objects
 export const getMarketLeaders = (leaderType: string): Promise<MarketLeader[]> => {

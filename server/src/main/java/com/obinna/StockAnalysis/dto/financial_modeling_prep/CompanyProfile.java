@@ -7,25 +7,22 @@ import lombok.Setter;
 @Setter
 public class CompanyProfile {
     private String symbol;
-    private int price;
-    private int beta;
-    private int volAvg;
-    private long mktCap;
-    private int lasDiv;
+    private Double price;
+    private Double beta;
+    private Long averageVolume;
+    private Long marketCap;
+    private Double lastDividend;
     private String range;
-    private int changes;
+    private Double changes;
+
     private String companyName;
-    private String currency;
-    private String cik;
-    private String isin;
-    private String cusip;
-    private String exchange;
-    private String exchangeShortName;
     private String industry;
+    private String sector;
+
+    // keep the rest as String/Boolean as you have
     private String website;
     private String description;
     private String ceo;
-    private String sector;
     private String country;
     private String fullTimeEmployees;
     private String phone;
@@ -33,8 +30,10 @@ public class CompanyProfile {
     private String city;
     private String state;
     private String zip;
-    private int dcfDiff;
-    private int dcf;
+
+    private Double dcfDiff;
+    private Double dcf;
+
     private String image;
     private String ipoDate;
     private Boolean defaultImage;
@@ -43,3 +42,4 @@ public class CompanyProfile {
     private Boolean isAdr;
     private Boolean isFund;
 }
+
