@@ -1,23 +1,22 @@
-# Use a slim Python base to keep the AWS image small
-FROM python:3.11-slim
+# Dockerfile for AWS Lambda Python 3.13
+# Supports both producer and worker handlers via environment variable
 
-# Install system dependencies for psycopg2 and numpy
-RUN apt-get update && apt-get install -y \
-    libpq-dev gcc python3-dev \
-    && rm -rf /var/lib/apt/lists/*
+FROM public.ecr.aws/lambda/python:3.13
 
-WORKDIR /app
+# Install system dependencies for psycopg2
+RUN dnf install -y libpq-devel gcc && dnf clean all
 
-# Copy and install requirements first to leverage Docker cache
-COPY requirements.txt .
+# Copy requirements first (for Docker layer caching)
+COPY requirements.txt ${LAMBDA_TASK_ROOT}
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy your Python script
-COPY . .
+# Copy all project files
+COPY . ${LAMBDA_TASK_ROOT}
 
-# Environment variables will be injected by AWS ECS/Lambda
-# Make the wrapper script executable
-RUN chmod +x run_pipeline.sh
+# Verify Model_Functions package structure
+RUN python -c "from Model_Functions import score_risk_with_existing_model, train_and_save_model, score_risk_with_model_obj; print('Model_Functions OK')"
 
-# Run the wrapper instead of a single script
-CMD ["./run_pipeline.sh"]
+# Default handler - override via Lambda config or docker run
+# For Producer Lambda: set handler to "lambda_handlers.producer_handler"
+# For Worker Lambda: set handler to "lambda_handlers.worker_handler"
+CMD [ "lambda_handlers.worker_handler" ]

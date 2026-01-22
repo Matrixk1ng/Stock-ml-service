@@ -1,6 +1,11 @@
-.venv
-.env
+# Ignore these
 __pycache__
 *.pyc
+.venv
+venv
+.env
 .git
 .gitignore
+*.md
+stocks/
+.pytest_cache

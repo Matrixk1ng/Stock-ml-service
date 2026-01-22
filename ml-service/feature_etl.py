@@ -1,14 +1,21 @@
 import pandas as pd
 import numpy as np
 import pandas_ta as ta
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from psycopg2.extras import execute_values
-from dotenv import load_dotenv
-import os
-load_dotenv()
+from db_utils import get_engine, get_universe
 
-DB_URL = os.getenv("DB_URL")
-engine = create_engine(DB_URL, pool_pre_ping=True)
+# Get centralized engine - NO MORE local create_engine calls
+engine = get_engine()
+
+# Cache SPY data to avoid reloading multiple times
+_SPY_CACHE = None
+
+def get_spy_df_cached() -> pd.DataFrame:
+    global _SPY_CACHE
+    if _SPY_CACHE is None:
+        _SPY_CACHE = load_spy_df()
+    return _SPY_CACHE
 
 FEATURE_COLS = [
     "ticker",
@@ -162,66 +169,58 @@ def upsert_features_fast(df: pd.DataFrame, page_size: int = 20000) -> int:
 
     return len(rows)
 
-def get_universe(limit: int | None = None) -> list[str]:
-    q = "SELECT ticker FROM stocks ORDER BY ticker"
-    if limit:
-        df = pd.read_sql(q + " LIMIT %(lim)s", engine, params={"lim": limit})
-    else:
-        df = pd.read_sql(q, engine)
-    return df["ticker"].tolist()
-# def normalize_date(x):
-#     if x is None:
-#         return None
-#     if isinstance(x, str):
-#         return pd.to_datetime(x).date()
-#     if isinstance(x, pd.Timestamp):
-#         return x.date()
-#     if isinstance(x, np.datetime64):
-#         return pd.to_datetime(x).date()
-#     # already datetime.date or datetime.datetime
-#     return x if not hasattr(x, "date") else x.date()
-def build_all_features():
-    spy_df = load_spy_df()
-    tickers = get_universe(5)
+def build_features_for_ticker(t: str) -> int:
+    t = t.upper()
+    spy_df = get_spy_df_cached()
 
+    # 1) last feature date already stored
+    last_feat = get_last_feature_date(t)
+    if last_feat is not None:
+        last_feat = pd.to_datetime(last_feat).date()
+
+    # 2) fetch enough history to compute rolling windows correctly
+    start = (
+        (pd.Timestamp(last_feat) - pd.Timedelta(days=180)).date()
+        if last_feat
+        else (pd.Timestamp.today() - pd.Timedelta(days=365 * 5)).date()
+    )
+
+    prices_df = fetch_price_window(t, start)
+    feat_df = compute_features(t, prices_df, spy_df)
+
+    if feat_df.empty:
+        print(f"[SKIP] {t}: not enough history / missing SPY overlap")
+        return 0
+
+    # 3) ensure type, then keep only NEW dates
+    feat_df["feature_date"] = pd.to_datetime(feat_df["feature_date"]).dt.date
+    if last_feat:
+        feat_df = feat_df[feat_df["feature_date"] > last_feat]
+
+    if feat_df.empty:
+        print(f"[OK] {t}: 0 new feature rows")
+        return 0
+
+    # 4) write only new rows
+    n = upsert_features_fast(feat_df)
+    print(f"[OK] {t}: {n} new feature rows")
+    return n
+
+def build_all_features(limit: int | None = None):
+    tickers = get_universe(limit=limit)
     ok = fail = 0
+    total = 0
+
     for t in tickers:
         try:
-            # 1) last feature date already stored
-            last_feat = get_last_feature_date(t)
-            if last_feat is not None:
-                last_feat = pd.to_datetime(last_feat).date()
-
-            # 2) fetch enough history to compute rolling windows correctly
-            #    (180 calendar days buffer ~ 120 trading days)
-            start = (
-                (pd.Timestamp(last_feat) - pd.Timedelta(days=180)).date()
-                if last_feat
-                else (pd.Timestamp.today() - pd.Timedelta(days=365*5)).date()
-            )
-
-            prices_df = fetch_price_window(t, start)
-            feat_df = compute_features(t, prices_df, spy_df)
-            if feat_df.empty:
-                print(f"[SKIP] {t}: not enough history / missing SPY overlap")
-                continue
-
-
-            # 3) ensure type, then keep only NEW dates
-            feat_df["feature_date"] = pd.to_datetime(feat_df["feature_date"]).dt.date
-
-            if last_feat:
-                feat_df = feat_df[feat_df["feature_date"] > last_feat]
-
-            # 4) write only new rows (no duplicates)
-            n = upsert_features_fast(feat_df)
+            total += build_features_for_ticker(t)
             ok += 1
-            print(f"[OK] {t}: {n} new rows")
-
         except Exception as e:
             fail += 1
             print(f"[FAIL] {t}: {e}")
 
-    print(f"Done. ok={ok}, fail={fail}")
+    print(f"Done. ok={ok}, fail={fail}, inserted={total}")
 
-build_all_features()
+
+if __name__ == "__main__":
+    build_all_features(limit=20)
